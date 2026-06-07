@@ -1,0 +1,12 @@
+html {
+  min-width: 320px;
+  background: #f8f3ed;
+}
+
+body {
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
