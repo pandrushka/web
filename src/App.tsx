@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Alert, Box, Container, Stack } from '@mui/material'
-import { login, refreshAuth, register } from './api/auth'
+import { login, refreshAuth, register, resendVerificationEmail, verifyEmail } from './api/auth'
 import {
   createAdminQuestion,
   fetchAdminQuestions,
@@ -15,11 +15,12 @@ import { AdminQuestionPanel } from './components/AdminQuestionPanel'
 import { AuthCard } from './components/AuthCard'
 import { DashboardPanel } from './components/DashboardPanel'
 import { LandingPage } from './components/LandingPage'
+import { PendingVerificationPanel } from './components/PendingVerificationPanel'
 import { QuestionnairePanel } from './components/QuestionnairePanel'
 import type { AuthMode, User } from './types/auth'
 import type { AppView } from './types/navigation'
 import type { AnswerValue, NewQuestionPayload, Question } from './types/onboarding'
-import { clearAuthSession, loadAuthSession, saveAuthSession } from './utils/authSession'
+import { authSessionKey, clearAuthSession, loadAuthSession, saveAuthSession } from './utils/authSession'
 import { isSuperAdmin } from './utils/auth'
 import { defaultAnswers, hasAnswer } from './utils/onboarding'
 
@@ -29,12 +30,16 @@ function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null)
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [adminQuestions, setAdminQuestions] = useState<Question[]>([])
   const [answers, setAnswers] = useState<Record<number, AnswerValue>>({})
   const [loading, setLoading] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [adminLoading, setAdminLoading] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
@@ -43,11 +48,28 @@ function App() {
   const [success, setSuccess] = useState<string | null>(null)
 
   const isRegister = mode === 'register'
+  const turnstileSiteKey = (import.meta.env as Record<string, string | undefined>).VITE_TURNSTILE_SITE_KEY ?? ''
   const userIsSuperAdmin = Boolean(user && isSuperAdmin(user))
   const canSubmitAnswers = useMemo(
     () => questions.length > 0 && questions.every((question) => hasAnswer(question, answers[question.id])),
     [answers, questions],
   )
+
+  async function completeAuth(auth: { user: User; access_token: string; refresh_token: string }) {
+    setPendingVerificationEmail(null)
+    setPendingNotice(null)
+    setUser(auth.user)
+    setAccessToken(auth.access_token)
+    saveAuthSession(auth)
+    setActiveView('dashboard')
+    await loadQuestions(auth.access_token)
+
+    if (isSuperAdmin(auth.user)) {
+      await loadAdminQuestions(auth.access_token)
+    } else {
+      setAdminQuestions([])
+    }
+  }
 
   useEffect(() => {
     if (!user) return undefined
@@ -71,6 +93,30 @@ function App() {
     let cancelled = false
 
     async function restoreSession() {
+      const verificationToken = new URLSearchParams(window.location.search).get('email_verification_token')
+
+      if (verificationToken) {
+        try {
+          const auth = await verifyEmail(verificationToken)
+
+          if (cancelled) return
+
+          await completeAuth(auth)
+          setSuccess('Email verified. Your account is active.')
+        } catch (verificationError) {
+          if (!cancelled) {
+            setError(verificationError instanceof Error ? verificationError.message : 'Could not verify your email')
+          }
+        } finally {
+          if (!cancelled) {
+            window.history.replaceState({}, '', window.location.pathname)
+            setBootstrapping(false)
+          }
+        }
+
+        return
+      }
+
       const session = loadAuthSession()
 
       if (!session) {
@@ -83,22 +129,11 @@ function App() {
 
         if (cancelled) return
 
-        const nextSession = {
-          ...session,
+        await completeAuth({
+          user: session.user,
           access_token: refreshed.access_token,
-        }
-
-        setUser(session.user)
-        setAccessToken(refreshed.access_token)
-        setActiveView('dashboard')
-        saveAuthSession(nextSession)
-        await loadQuestions(refreshed.access_token)
-
-        if (isSuperAdmin(session.user)) {
-          await loadAdminQuestions(refreshed.access_token)
-        } else {
-          setAdminQuestions([])
-        }
+          refresh_token: session.refresh_token,
+        })
       } catch {
         clearAuthSession()
       } finally {
@@ -113,6 +148,37 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    async function handleStorage(event: StorageEvent) {
+      if (event.key !== authSessionKey) return
+
+      if (!event.newValue) {
+        setUser(null)
+        setAccessToken(null)
+        setPendingVerificationEmail(null)
+        setPendingNotice(null)
+        setQuestions([])
+        setAdminQuestions([])
+        setAnswers({})
+        setActiveView('dashboard')
+        return
+      }
+
+      try {
+        const session = JSON.parse(event.newValue) as { user: User; access_token: string; refresh_token: string }
+        await completeAuth(session)
+      } catch {
+        clearAuthSession()
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
+
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
@@ -120,19 +186,30 @@ function App() {
     setLoading(true)
 
     try {
-      const auth = isRegister ? await register(email, password) : await login(email, password)
+      if (isRegister) {
+        const response = await register(email, password, turnstileSiteKey ? turnstileToken : null)
 
-      setUser(auth.user)
-      setAccessToken(auth.access_token)
-      saveAuthSession(auth)
-      setSuccess(isRegister ? 'Account created. Answer your first questions below.' : 'Signed in.')
-      setActiveView('dashboard')
-      await loadQuestions(auth.access_token)
-
-      if (isSuperAdmin(auth.user)) {
-        await loadAdminQuestions(auth.access_token)
+        setPassword('')
+        setTurnstileToken(null)
+        setPendingVerificationEmail(email.trim().toLowerCase())
+        setPendingNotice(response.message)
       } else {
-        setAdminQuestions([])
+        const auth = await login(email, password)
+
+        if ('access_token' in auth) {
+          await completeAuth(auth)
+          setSuccess('Signed in.')
+        } else {
+          clearAuthSession()
+          setUser(null)
+          setAccessToken(null)
+          setQuestions([])
+          setAdminQuestions([])
+          setAnswers({})
+          setPendingVerificationEmail(auth.user.email)
+          setPendingNotice(null)
+          setPassword('')
+        }
       }
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : 'Could not authenticate')
@@ -189,6 +266,25 @@ function App() {
     }
   }
 
+  async function handleResendVerificationEmail() {
+    if (!pendingVerificationEmail) return
+
+    setError(null)
+    setSuccess(null)
+    setPendingNotice(null)
+    setResendLoading(true)
+
+    try {
+      await resendVerificationEmail(pendingVerificationEmail)
+      setPendingNotice('Verification email sent.')
+    } catch (resendError) {
+      setPendingNotice(resendError instanceof Error ? resendError.message : 'Could not resend verification email')
+      setError(resendError instanceof Error ? resendError.message : 'Could not resend verification email')
+    } finally {
+      setResendLoading(false)
+    }
+  }
+
   async function handleToggleQuestion(question: Question, active: boolean) {
     if (!accessToken) return
 
@@ -240,14 +336,24 @@ function App() {
     setActiveView(view)
   }
 
+  function handleModeChange(nextMode: AuthMode) {
+    setMode(nextMode)
+    setTurnstileToken(null)
+    setError(null)
+    setSuccess(null)
+  }
+
   function handleLogout() {
     setUser(null)
     setAccessToken(null)
+    setPendingVerificationEmail(null)
+    setPendingNotice(null)
     setQuestions([])
     setAdminQuestions([])
     setAnswers({})
     setEmail('')
     setPassword('')
+    setTurnstileToken(null)
     setMode('login')
     setActiveView('dashboard')
     setDrawerOpen(false)
@@ -261,10 +367,16 @@ function App() {
       <Box sx={{ minHeight: '100svh', bgcolor: 'background.default' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
           <Stack spacing={3} sx={{ alignItems: 'center' }}>
-            <LandingPage onStartJourney={() => setMode('register')} onHaveAccount={() => setMode('login')} />
+            <LandingPage onStartJourney={() => handleModeChange('register')} onHaveAccount={() => handleModeChange('login')} />
           </Stack>
         </Container>
       </Box>
+    )
+  }
+
+  if (pendingVerificationEmail) {
+    return (
+      <PendingVerificationPanel loading={resendLoading} notice={pendingNotice} onResend={handleResendVerificationEmail} />
     )
   }
 
@@ -272,7 +384,7 @@ function App() {
     <Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, md: 5 } }}>
       <Container maxWidth="lg">
         <Stack spacing={4} sx={{ alignItems: 'center' }}>
-          <LandingPage onStartJourney={() => setMode('register')} onHaveAccount={() => setMode('login')} />
+            <LandingPage onStartJourney={() => handleModeChange('register')} onHaveAccount={() => handleModeChange('login')} />
           <AuthCard
             mode={mode}
             email={email}
@@ -280,9 +392,12 @@ function App() {
             loading={loading}
             error={error}
             success={success}
+            turnstileSiteKey={turnstileSiteKey || null}
+            turnstileToken={turnstileToken}
             onEmailChange={setEmail}
             onPasswordChange={setPassword}
-            onModeChange={setMode}
+            onModeChange={handleModeChange}
+            onTurnstileTokenChange={setTurnstileToken}
             onSubmit={handleAuth}
           />
         </Stack>

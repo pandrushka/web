@@ -1,6 +1,6 @@
 import type { AuthResponse } from '../types/auth'
 
-const authSessionKey = 'forme.auth.session'
+export const authSessionKey = 'forme.auth.session'
 
 export function loadAuthSession() {
   const rawSession = window.localStorage.getItem(authSessionKey)

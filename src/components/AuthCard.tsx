@@ -2,6 +2,7 @@ import type { FormEvent } from 'react'
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Stack, TextField, Typography } from '@mui/material'
 import type { AuthMode } from '../types/auth'
+import { TurnstileWidget } from './TurnstileWidget'
 
 type AuthCardProps = {
   mode: AuthMode
@@ -10,9 +11,12 @@ type AuthCardProps = {
   loading: boolean
   error: string | null
   success: string | null
+  turnstileSiteKey: string | null
+  turnstileToken: string | null
   onEmailChange: (email: string) => void
   onPasswordChange: (password: string) => void
   onModeChange: (mode: AuthMode) => void
+  onTurnstileTokenChange: (token: string | null) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
 
@@ -23,12 +27,16 @@ export function AuthCard({
   loading,
   error,
   success,
+  turnstileSiteKey,
+  turnstileToken,
   onEmailChange,
   onPasswordChange,
   onModeChange,
+  onTurnstileTokenChange,
   onSubmit,
 }: AuthCardProps) {
   const isRegister = mode === 'register'
+  const canSubmitRegister = !turnstileSiteKey || Boolean(turnstileToken)
 
   return (
     <Card elevation={0} sx={{ width: '100%', maxWidth: 560, mx: 'auto', border: '1px solid', borderColor: 'divider' }}>
@@ -74,7 +82,10 @@ export function AuthCard({
               required
               fullWidth
             />
-            <Button type="submit" variant="contained" size="large" disabled={loading}>
+            {isRegister && turnstileSiteKey && (
+              <TurnstileWidget siteKey={turnstileSiteKey} onTokenChange={onTurnstileTokenChange} />
+            )}
+            <Button type="submit" variant="contained" size="large" disabled={loading || (isRegister && !canSubmitRegister)}>
               {loading ? <CircularProgress size={22} color="inherit" /> : isRegister ? 'Create account' : 'Sign in'}
             </Button>
           </Box>

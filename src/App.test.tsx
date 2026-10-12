@@ -9,6 +9,8 @@ const authApi = vi.hoisted(() => ({
   login: vi.fn(),
   register: vi.fn(),
   refreshAuth: vi.fn(),
+  verifyEmail: vi.fn(),
+  resendVerificationEmail: vi.fn(),
 }))
 
 const onboardingApi = vi.hoisted(() => ({
@@ -49,6 +51,8 @@ beforeEach(() => {
   authApi.login.mockReset()
   authApi.register.mockReset()
   authApi.refreshAuth.mockReset()
+  authApi.verifyEmail.mockReset()
+  authApi.resendVerificationEmail.mockReset()
   onboardingApi.fetchQuestions.mockReset()
   onboardingApi.fetchAdminQuestions.mockReset()
   onboardingApi.submitAnswers.mockReset()
@@ -80,6 +84,86 @@ describe('App auth shell', () => {
     })
   })
 
+  it('shows the pending verification page after login for an unverified user', async () => {
+    authApi.login.mockResolvedValue({
+      user: {
+        id: 1,
+        email: 'andrey@example.com',
+        role: 'member',
+        email_verified_at: null,
+      },
+      status: 'pending_verification',
+      message: 'Need to validate email',
+    })
+    authApi.resendVerificationEmail.mockResolvedValue({ message: 'If the account exists, the verification email has been sent.' })
+
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await screen.findByLabelText(/email/i)
+    await user.type(screen.getByLabelText(/email/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    await screen.findByText(/need to validate email/i)
+    await user.click(screen.getByRole('button', { name: /resend email/i }))
+
+    await waitFor(() => expect(authApi.resendVerificationEmail).toHaveBeenCalledWith('andrey@example.com'))
+    expect(window.localStorage.getItem('forme.auth.session')).toBeNull()
+  })
+
+  it('moves a pending tab to the dashboard when another tab verifies the account', async () => {
+    authApi.login.mockResolvedValue({
+      user: {
+        id: 1,
+        email: 'andrey@example.com',
+        role: 'member',
+        email_verified_at: null,
+      },
+      status: 'pending_verification',
+      message: 'Need to validate email',
+    })
+    onboardingApi.fetchQuestions.mockResolvedValue(questionsResponse)
+
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await screen.findByLabelText(/email/i)
+    await user.type(screen.getByLabelText(/email/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
+    await screen.findByText(/need to validate email/i)
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'forme.auth.session',
+        newValue: JSON.stringify(userAuthResponse),
+      }),
+    )
+
+    await waitFor(() => expect(screen.getByText(/welcome back/i)).toBeInTheDocument())
+    expect(onboardingApi.fetchQuestions).toHaveBeenCalledWith('access-token-1')
+  })
+
+  it('shows a pending verification message after registration', async () => {
+    authApi.register.mockResolvedValue({ message: 'Check your email to verify your account.' })
+
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await screen.findByLabelText(/email/i)
+    await user.click(screen.getByRole('button', { name: /need an account\? create one/i }))
+    await user.type(screen.getByLabelText(/email/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /create account/i }))
+
+    await screen.findByText(/need to validate email/i)
+    expect(window.localStorage.getItem('forme.auth.session')).toBeNull()
+  })
+
   it('restores a saved session and redirects straight to the dashboard', async () => {
     window.localStorage.setItem('forme.auth.session', JSON.stringify(userAuthResponse))
     authApi.refreshAuth.mockResolvedValue({ access_token: 'refreshed-access-token' })
@@ -90,5 +174,17 @@ describe('App auth shell', () => {
     await waitFor(() => expect(screen.getByText(/welcome back/i)).toBeInTheDocument())
     expect(authApi.refreshAuth).toHaveBeenCalledWith('refresh-token-1')
     expect(onboardingApi.fetchQuestions).toHaveBeenCalledWith('refreshed-access-token')
+  })
+
+  it('verifies an account from the email link and signs the user in', async () => {
+    authApi.verifyEmail.mockResolvedValue(userAuthResponse)
+    onboardingApi.fetchQuestions.mockResolvedValue(questionsResponse)
+    window.history.replaceState({}, '', '/?email_verification_token=verify-token-1')
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByText(/welcome back/i)).toBeInTheDocument())
+    expect(authApi.verifyEmail).toHaveBeenCalledWith('verify-token-1')
+    expect(onboardingApi.fetchQuestions).toHaveBeenCalledWith('access-token-1')
   })
 })
