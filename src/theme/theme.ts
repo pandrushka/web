@@ -1,156 +1,129 @@
-import { createTheme } from '@mui/material/styles'
-
-const cream = '#F4EAD7'
-const paper = '#FFF7E8'
-const navy = '#1F3142'
-const clay = '#B86443'
-const clayHover = '#9F5236'
-const olive = '#7E8460'
-const gold = '#C8AD7A'
-const blue = '#425E6F'
-const border = '#D8C7A8'
+import { createTheme, alpha } from '@mui/material/styles'
 
 export const brandTheme = createTheme({
   palette: {
     mode: 'light',
-    background: {
-      default: cream,
-      paper,
-    },
     primary: {
-      main: clay,
-      dark: clayHover,
-      contrastText: '#fffaf1',
+      main: '#2563EB',
+      dark: '#1D4ED8',
+      light: '#DBEAFE',
     },
     secondary: {
-      main: olive,
-      dark: '#68704c',
-      contrastText: '#fffaf1',
+      main: '#7C3AED',
+      light: '#EDE9FE',
+    },
+    background: {
+      default: '#F8FAFC',
+      paper: '#FFFFFF',
     },
     text: {
-      primary: navy,
-      secondary: blue,
+      primary: '#111827',
+      secondary: '#64748B',
     },
-    divider: border,
+    success: {
+      main: '#16A34A',
+    },
+    warning: {
+      main: '#F59E0B',
+    },
+    error: {
+      main: '#DC2626',
+    },
+    divider: '#E2E8F0',
     action: {
-      hover: 'rgba(31, 49, 66, 0.04)',
-      selected: 'rgba(31, 49, 66, 0.08)',
+      hover: alpha('#2563EB', 0.04),
+      selected: alpha('#7C3AED', 0.1),
     },
   },
   shape: {
-    borderRadius: 20,
+    borderRadius: 12,
   },
   typography: {
-    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: '"Inter Variable", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontWeightLight: 400,
+    fontWeightRegular: 400,
+    fontWeightMedium: 500,
+    fontWeightBold: 700,
     h1: {
-      fontFamily: 'Fraunces, Georgia, serif',
       fontWeight: 700,
       letterSpacing: '-0.03em',
     },
     h2: {
-      fontFamily: 'Fraunces, Georgia, serif',
       fontWeight: 700,
       letterSpacing: '-0.02em',
     },
     h3: {
-      fontFamily: 'Fraunces, Georgia, serif',
-      fontWeight: 700,
+      fontWeight: 600,
       letterSpacing: '-0.02em',
     },
     h4: {
-      fontFamily: 'Fraunces, Georgia, serif',
-      fontWeight: 700,
+      fontWeight: 600,
       letterSpacing: '-0.02em',
     },
+    h5: {
+      fontWeight: 600,
+    },
+    h6: {
+      fontWeight: 600,
+    },
+    subtitle1: {
+      fontWeight: 500,
+    },
+    subtitle2: {
+      fontWeight: 600,
+    },
+    body1: {
+      fontWeight: 400,
+    },
+    body2: {
+      fontWeight: 400,
+    },
     button: {
-      fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      fontWeight: 700,
+      fontWeight: 600,
       textTransform: 'none',
       letterSpacing: 0,
     },
     caption: {
       textTransform: 'uppercase',
       letterSpacing: '0.16em',
-      fontWeight: 700,
+      fontWeight: 600,
+    },
+    overline: {
+      fontWeight: 600,
     },
   },
   components: {
     MuiCssBaseline: {
-      styleOverrides: {
+      styleOverrides: (theme) => ({
         html: {
           minWidth: '320px',
-          backgroundColor: cream,
+          backgroundColor: theme.palette.background.default,
         },
         body: {
           margin: 0,
-          backgroundColor: cream,
-          color: navy,
+          backgroundColor: theme.palette.background.default,
+          color: theme.palette.text.primary,
         },
         '#root': {
           minHeight: '100svh',
-          backgroundColor: cream,
+          backgroundColor: theme.palette.background.default,
         },
-      },
+      }),
     },
     MuiButton: {
+      defaultProps: {
+        disableElevation: true,
+      },
       styleOverrides: {
-        root: {
-          borderRadius: 999,
+        root: ({ theme }) => ({
+          borderRadius: theme.shape.borderRadius,
           minHeight: 48,
-          paddingInline: '1.35rem',
-          boxShadow: 'none',
-          '&.MuiButton-containedPrimary': {
-            backgroundColor: clay,
-            color: '#fffaf1',
-            '&:hover': {
-              backgroundColor: clayHover,
-              boxShadow: 'none',
-            },
+          paddingInline: '1.25rem',
+          '&.Mui-focusVisible': {
+            outline: `2px solid ${theme.palette.primary.main}`,
+            outlineOffset: 2,
           },
-          '&.MuiButton-containedSecondary': {
-            backgroundColor: olive,
-            color: '#fffaf1',
-            '&:hover': {
-              backgroundColor: '#69704f',
-              boxShadow: 'none',
-            },
-          },
-          '&.MuiButton-outlined': {
-            borderColor: border,
-            backgroundColor: 'rgba(255, 247, 232, 0.35)',
-            '&:hover': {
-              borderColor: gold,
-              backgroundColor: 'rgba(255, 247, 232, 0.75)',
-            },
-          },
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-          backgroundColor: paper,
-          border: `1px solid ${border}`,
-          boxShadow: '0 10px 28px rgba(31, 49, 66, 0.05)',
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-          backgroundColor: paper,
-          borderColor: border,
-        },
-      },
-    },
-    MuiChip: {
-      styleOverrides: {
-        root: {
-          borderRadius: 999,
-          borderColor: border,
-        },
+        }),
       },
     },
     MuiTextField: {
@@ -160,13 +133,66 @@ export const brandTheme = createTheme({
     },
     MuiOutlinedInput: {
       styleOverrides: {
+        root: ({ theme }) => ({
+          borderRadius: theme.shape.borderRadius,
+          backgroundColor: theme.palette.background.paper,
+          '&:hover .MuiOutlinedInput-notchedOutline': {
+            borderColor: theme.palette.text.secondary,
+          },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderColor: theme.palette.primary.main,
+            borderWidth: 2,
+          },
+          '&.Mui-error.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderColor: theme.palette.error.main,
+          },
+        }),
+        notchedOutline: ({ theme }) => ({
+          borderColor: theme.palette.divider,
+        }),
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          backgroundImage: 'none',
+          backgroundColor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.divider}`,
+          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
+        }),
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          backgroundImage: 'none',
+          backgroundColor: theme.palette.background.paper,
+        }),
+      },
+    },
+    MuiAppBar: {
+      defaultProps: {
+        color: 'inherit',
+        elevation: 0,
+      },
+      styleOverrides: {
+        root: ({ theme }) => ({
+          backgroundColor: theme.palette.background.paper,
+          color: theme.palette.text.primary,
+          backgroundImage: 'none',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+        }),
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
         root: {
-          borderRadius: 18,
-          backgroundColor: 'rgba(255, 247, 232, 0.7)',
+          borderRadius: 999,
+          fontWeight: 600,
         },
-        notchedOutline: {
-          borderColor: border,
-        },
+        outlined: ({ theme }) => ({
+          borderColor: theme.palette.divider,
+        }),
       },
     },
   },

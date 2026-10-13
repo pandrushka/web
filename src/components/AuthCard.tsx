@@ -18,6 +18,8 @@ type AuthCardProps = {
   onModeChange: (mode: AuthMode) => void
   onTurnstileTokenChange: (token: string | null) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  heading?: string
+  description?: string
 }
 
 export function AuthCard({
@@ -34,6 +36,8 @@ export function AuthCard({
   onModeChange,
   onTurnstileTokenChange,
   onSubmit,
+  heading,
+  description,
 }: AuthCardProps) {
   const isRegister = mode === 'register'
   const canSubmitRegister = !turnstileSiteKey || Boolean(turnstileToken)
@@ -48,15 +52,15 @@ export function AuthCard({
               label="for me. for my growth. for real love."
               color="secondary"
               variant="outlined"
-              sx={{ alignSelf: 'center', fontWeight: 800 }}
+              sx={{ alignSelf: 'center', fontWeight: 700 }}
             />
             <Typography variant="h1" sx={{ fontSize: { xs: 36, sm: 48 }, lineHeight: 1 }}>
-              {isRegister ? 'Create your account' : 'Sign in'}
+              {heading ?? (isRegister ? 'Create your account' : 'Sign in')}
             </Typography>
             <Typography color="text.secondary">
-              {isRegister
+              {description ?? (isRegister
                 ? 'Create your account to start your live questionnaire and keep the prompts evolving.'
-                : 'Sign in to continue your questionnaire and dating pattern work.'}
+                : 'Sign in to continue your questionnaire and dating pattern work.')}
             </Typography>
           </Stack>
 

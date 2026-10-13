@@ -17,13 +17,12 @@ export function BrandLogo({ compact = false }: BrandLogoProps) {
           bgcolor: 'background.paper',
           display: 'grid',
           placeItems: 'center',
-          boxShadow: '0 8px 18px rgba(31, 49, 66, 0.06)',
+          boxShadow: 2,
         }}
       >
         <Typography
           component="span"
           sx={{
-            fontFamily: 'Fraunces, Georgia, serif',
             fontWeight: 700,
             fontSize: compact ? 36 : 42,
             lineHeight: 1,
@@ -37,7 +36,6 @@ export function BrandLogo({ compact = false }: BrandLogoProps) {
       <Typography
         component="span"
         sx={{
-          fontFamily: 'Fraunces, Georgia, serif',
           fontSize: compact ? 42 : 48,
           fontWeight: 700,
           letterSpacing: '-0.03em',

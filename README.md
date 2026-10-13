@@ -1,55 +1,29 @@
-# Web
+# Web Application
 
-React + Vite frontend for Matchcraft.
-
-## Stack
-
-- React
-- TypeScript
-- Vite
-- MUI
-- pnpm
+React, TypeScript, Vite, and MUI frontend for a commerce platform serving small neighborhood stores in Nicaragua. The web app is the first target; mobile app support is planned.
 
 ## Setup
 
-Install dependencies:
+Requires Node.js and pnpm. From this directory:
 
 ```sh
 pnpm install
-```
-
-Configure the API base URL:
-
-```sh
 cp .env.example .env.local
-```
-
-Default:
-
-```text
-VITE_API_BASE_URL=http://localhost:3000
-```
-
-Run the dev server:
-
-```sh
 pnpm dev
 ```
+
+Set `VITE_API_BASE_URL` in `.env.local` to the Rails API URL. The development default is `http://localhost:3000`.
 
 ## Checks
 
 ```sh
 pnpm lint
+pnpm test --run
 pnpm build
 ```
 
-## API Flow
+## Current behavior
 
-The app currently calls the Rails API for:
+The frontend has JWT-based login and registration, session refresh, email verification states, and existing onboarding/questionnaire screens. Preserve the working authentication behavior unless a task specifically requests a change. The questionnaire flow belongs to the previous application and is transitional while the product is converted.
 
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `GET /api/v1/onboarding/questions`
-- `POST /api/v1/onboarding/answers`
-
-Access tokens are held in memory for this first prototype.
+For project direction and engineering constraints, see [../../docs/project.md](../../docs/project.md) and [AGENTS.md](AGENTS.md).

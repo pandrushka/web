@@ -26,7 +26,7 @@ export function QuestionnairePanel({
       <CardContent sx={{ p: { xs: 3, md: 4 } }}>
         <Stack spacing={3}>
           <Stack spacing={1}>
-            <Typography color="secondary" sx={{ fontWeight: 900, fontSize: 13, letterSpacing: '0.08em' }}>
+            <Typography color="secondary" sx={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.08em' }}>
               CREATE ACCOUNT QUESTIONNAIRE
             </Typography>
             <Typography variant="h2" sx={{ fontSize: { xs: 28, md: 38 }, lineHeight: 1.05 }}>

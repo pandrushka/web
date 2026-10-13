@@ -1,54 +1,25 @@
-# AGENTS.md
+# Web Application Guidance
 
-Guidance for Codex and other coding agents working in this React web app.
+This is the React, TypeScript, and Vite frontend for the neighborhood store platform. It uses MUI and pnpm and communicates with the separate Rails API in `../api`.
 
-## App Summary
-
-This is the frontend for the app. It is a Vite + React + TypeScript app using MUI.
-
-- Separate from the Rails API in `../api`
-- Uses MUI for UI and theming
-- Uses Vitest, React Testing Library, user-event, and MSW
-- Browser auth state is persisted in localStorage and restored with the API refresh endpoint
-
-## Setup
-
-Use pnpm.
+## Setup and checks
 
 ```sh
 pnpm install
 pnpm dev
-```
-
-## Tests
-
-Run lint, unit tests, and build:
-
-```sh
 pnpm lint
 pnpm test --run
 pnpm build
 ```
 
-## Frontend Conventions
+Tests use Vitest, React Testing Library, user-event, and MSW. Prefer behavior-level tests for requested behavior changes.
 
-- Keep the app component-driven.
-- Use MUI primitives and the existing brand theme.
-- Prefer small, focused components over monolithic screens.
-- Keep authenticated users on the dashboard unless they navigate elsewhere.
-- Keep admin questionnaire editing hidden from non-super-admins.
-- Keep requests and session behavior aligned with the Rails API contracts.
+## Conventions
 
-## Auth And Session
-
-- Auth login/register returns `user`, `access_token`, and `refresh_token`.
-- Store auth state in localStorage.
-- Use `/api/v1/auth/refresh` to restore sessions.
-- Clear stored auth state on logout.
-
-## Coding Conventions
-
-- Keep changes narrowly scoped.
-- Add tests for new behaviors.
-- Prefer behavior-level tests with RTL and API mocking with MSW.
-- Do not add backend-specific concerns here.
+- Keep components reasonably small and reusable; use existing MUI patterns and the centralized brand theme.
+- Design mobile-first and keep Spanish/localization support in mind.
+- Keep API calls and auth/session behavior aligned with the Rails API contract. Do not move backend authorization or business rules into the frontend.
+- Preserve the existing JWT login/registration, refresh, logout, and email verification behavior unless a task explicitly requests a change.
+- Store data must be scoped to the selected store. Frontend checks may improve the experience but never replace backend authorization.
+- The current source still includes previous-app onboarding/questionnaire screens. Do not extend that domain as product work unless specifically requested.
+- Make narrowly scoped changes and do not implement planned store, product, order, WhatsApp, inventory, or analytics features without a specific request.

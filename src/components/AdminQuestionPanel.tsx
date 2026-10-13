@@ -61,7 +61,7 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
       <CardContent sx={{ p: { xs: 3, md: 4 } }}>
         <Stack spacing={3}>
           <Stack spacing={1}>
-            <Typography color="secondary" sx={{ fontWeight: 900, fontSize: 13, letterSpacing: '0.08em' }}>
+            <Typography color="secondary" sx={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.08em' }}>
               ADMIN QUESTION MANAGEMENT
             </Typography>
             <Typography variant="h2" sx={{ fontSize: { xs: 28, md: 38 }, lineHeight: 1.05 }}>
@@ -73,7 +73,7 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
 
           <Stack spacing={1}>
             {questions.map((question) => (
-              <Card key={question.id} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: '#fff' }}>
+              <Card key={question.id} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
                 <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                   <Stack
                     direction={{ xs: 'column', sm: 'row' }}
@@ -84,7 +84,7 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
                         <Chip size="small" label={`#${question.position}`} />
                         <Chip size="small" label={formatQuestionType(question.question_type)} />
                       </Stack>
-                      <Typography sx={{ fontWeight: 800 }}>{question.prompt}</Typography>
+                      <Typography sx={{ fontWeight: 700 }}>{question.prompt}</Typography>
                     </Stack>
                     <FormControlLabel
                       control={
@@ -104,7 +104,7 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
           <Divider />
 
           <Box component="form" onSubmit={handleCreate} sx={{ display: 'grid', gap: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 900 }}>
+            <Typography variant="h6">
               Add a new question
             </Typography>
             <TextField

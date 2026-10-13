@@ -5,9 +5,10 @@ type PendingVerificationPanelProps = {
   loading: boolean
   notice: string | null
   onResend: () => void
+  contextMessage?: string | null
 }
 
-export function PendingVerificationPanel({ loading, notice, onResend }: PendingVerificationPanelProps) {
+export function PendingVerificationPanel({ loading, notice, onResend, contextMessage }: PendingVerificationPanelProps) {
   return (
     <Box sx={{ minHeight: '100svh', bgcolor: 'background.default' }}>
       <AppBar position="sticky" color="inherit" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -37,6 +38,7 @@ export function PendingVerificationPanel({ loading, notice, onResend }: PendingV
               {notice}
             </Typography>
           )}
+          {contextMessage && <Typography color="text.secondary">{contextMessage}</Typography>}
         </Stack>
       </Box>
     </Box>

@@ -15,7 +15,7 @@ export function DashboardPanel({ user, questionCount, canEditQuestions, onNaviga
   return (
     <Stack spacing={3}>
       <Stack spacing={1}>
-        <Typography color="secondary" sx={{ fontWeight: 900, fontSize: 13, letterSpacing: '0.08em' }}>
+        <Typography color="secondary" sx={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.08em' }}>
           DASHBOARD
         </Typography>
         <Typography variant="h1" sx={{ fontSize: { xs: 36, md: 52 }, lineHeight: 1 }}>
@@ -39,7 +39,7 @@ export function DashboardPanel({ user, questionCount, canEditQuestions, onNaviga
               <Stack spacing={2}>
                 <QuizOutlinedIcon color="secondary" />
                 <Stack spacing={0.5}>
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                  <Typography variant="h6">
                     Questionnaire
                   </Typography>
                   <Typography color="text.secondary">
@@ -61,7 +61,7 @@ export function DashboardPanel({ user, questionCount, canEditQuestions, onNaviga
                 <Stack spacing={2}>
                   <AdminPanelSettingsOutlinedIcon color="secondary" />
                   <Stack spacing={0.5}>
-                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                    <Typography variant="h6">
                       Super admin tools
                     </Typography>
                     <Typography color="text.secondary">

@@ -30,11 +30,11 @@ export function AppHeader({ user, onMenuClick, onLogout }: AppHeaderProps) {
         </Box>
 
         <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-          <Avatar sx={{ width: 38, height: 38, bgcolor: 'primary.main', fontWeight: 900 }}>
+          <Avatar sx={{ width: 38, height: 38, bgcolor: 'primary.main', fontWeight: 700 }}>
             {user.email.charAt(0).toUpperCase()}
           </Avatar>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-            <Typography sx={{ fontWeight: 900, lineHeight: 1.1 }}>{user.email}</Typography>
+            <Typography sx={{ fontWeight: 700, lineHeight: 1.1 }}>{user.email}</Typography>
             <Typography variant="caption" color="text.secondary">
               {user.role.replace('_', ' ')}
             </Typography>
