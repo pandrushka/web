@@ -32,6 +32,7 @@ type DashboardLayoutProps = {
   storeRole: StoreRole | null
   canSwitchContext: boolean
   isPlatformAdmin: boolean
+  showPlatformCatalog?: boolean
   activeSection: DashboardSection
   onContextChange: (context: DashboardContext) => void
   onNavigate: (section: DashboardSection) => void
@@ -39,7 +40,7 @@ type DashboardLayoutProps = {
   children: ReactNode
 }
 
-export function DashboardLayout({ email, role, context, storeRole, canSwitchContext, isPlatformAdmin, activeSection, onContextChange, onNavigate, onLogout, children }: DashboardLayoutProps) {
+export function DashboardLayout({ email, role, context, storeRole, canSwitchContext, isPlatformAdmin, showPlatformCatalog = false, activeSection, onContextChange, onNavigate, onLogout, children }: DashboardLayoutProps) {
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -56,13 +57,14 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
   if (context === 'platform' && isPlatformAdmin) {
     items.push(
       { id: 'invitations', label: 'Invitations', icon: <ConfirmationNumberOutlinedIcon /> },
+      ...(showPlatformCatalog ? [{ id: 'products' as const, label: 'Products & Categories', icon: <Inventory2OutlinedIcon /> }] : []),
       { id: 'users', label: 'Users', icon: <PeopleOutlineOutlinedIcon />, comingSoon: true },
       { id: 'platform_reports', label: 'Platform Reports', icon: <AssessmentOutlinedIcon />, comingSoon: true },
       { id: 'platform_settings', label: 'Platform Settings', icon: <SettingsOutlinedIcon />, comingSoon: true },
     )
   } else if (context === 'store' && (storeRole === 'owner' || storeRole === 'admin')) {
     items.push(
-      { id: 'products', label: 'Products', icon: <Inventory2OutlinedIcon />, comingSoon: true },
+      { id: 'products', label: 'Products', icon: <Inventory2OutlinedIcon /> },
       { id: 'orders', label: 'Orders', icon: <ShoppingBagOutlinedIcon />, comingSoon: true },
       { id: 'sales', label: 'Sales', icon: <AssessmentOutlinedIcon />, comingSoon: true },
       { id: 'store_settings', label: 'Store Settings', icon: <SettingsOutlinedIcon />, comingSoon: true },

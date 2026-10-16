@@ -1,22 +1,36 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Alert, Box, Button, Card, CardContent, CircularProgress, Container, Stack, Typography } from '@mui/material'
 import { login, refreshAuth, register, resendVerificationEmail, verifyEmail } from './api/auth'
 import { fetchMyStores } from './api/stores'
 import type { StoreProfile } from './api/stores'
-import { AuthCard } from './components/AuthCard'
-import { DashboardLayout } from './components/DashboardLayout'
 import type { DashboardContext, DashboardSection, StoreRole } from './components/DashboardLayout'
 import { LandingPage } from './components/LandingPage'
 import { PendingVerificationPanel } from './components/PendingVerificationPanel'
-import { StoreDirectory } from './components/StoreDirectory'
-import { StoreOnboarding } from './components/StoreOnboarding'
-import { StoreDetailsPanel } from './components/StoreDetailsPanel'
-import { StoreInvitations } from './components/StoreInvitations'
 import type { AuthMode, User } from './types/auth'
 import { authSessionKey, clearAuthSession, loadAuthSession, saveAuthSession } from './utils/authSession'
 import { isPlatformAdmin } from './utils/auth'
 import { dashboardRoleLabel } from './utils/roleLabels'
+import type { ImageTokenRefresh } from './api/productImages'
+import { clearProductImageCache } from './api/productImages'
+import { publicStoreSlugFromPath } from './utils/appRoutes'
+
+const AuthCard = lazy(() => import('./components/AuthCard').then(({ AuthCard: component }) => ({ default: component })))
+const DashboardLayout = lazy(() => import('./components/DashboardLayout').then(({ DashboardLayout: component }) => ({ default: component })))
+const StoreDirectory = lazy(() => import('./components/StoreDirectory').then(({ StoreDirectory: component }) => ({ default: component })))
+const StoreOnboarding = lazy(() => import('./components/StoreOnboarding').then(({ StoreOnboarding: component }) => ({ default: component })))
+const StoreDetailsPanel = lazy(() => import('./components/StoreDetailsPanel').then(({ StoreDetailsPanel: component }) => ({ default: component })))
+const StoreInvitations = lazy(() => import('./components/StoreInvitations').then(({ StoreInvitations: component }) => ({ default: component })))
+const StoreCatalogManagement = lazy(() => import('./features/catalog/StoreCatalogManagement').then(({ StoreCatalogManagement: component }) => ({ default: component })))
+const PublicStorefrontRoute = lazy(() => import('./features/storefront/PublicStorefrontRoute').then(({ PublicStorefrontRoute: component }) => ({ default: component })))
+
+function ScreenLoading() {
+  return <Box sx={{ minHeight: '100svh', display: 'grid', placeItems: 'center', bgcolor: 'background.default' }}><CircularProgress aria-label="Loading page" /></Box>
+}
+
+function SectionLoading() {
+  return <Box sx={{ py: 5, display: 'grid', placeItems: 'center' }}><CircularProgress aria-label="Loading section" /></Box>
+}
 
 function App() {
   const [mode, setMode] = useState<AuthMode>('login')
@@ -29,6 +43,7 @@ function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [myStores, setMyStores] = useState<StoreProfile[]>([])
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null)
+  const [selectedPlatformStore, setSelectedPlatformStore] = useState<StoreProfile | null>(null)
   const [memberStoresResolved, setMemberStoresResolved] = useState(false)
   const [memberStoresError, setMemberStoresError] = useState<string | null>(null)
   const [memberStoresAttempt, setMemberStoresAttempt] = useState(0)
@@ -40,8 +55,11 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [invitationContextMissing, setInvitationContextMissing] = useState(false)
+  const imageRefreshPromise = useRef<Promise<string> | null>(null)
   const invitationToken = readInvitationToken(window.location.pathname)
   const isInvitationRoute = invitationToken !== null
+  const hasEmailVerificationToken = new URLSearchParams(window.location.search).has('email_verification_token')
+  const publicStoreSlug = hasEmailVerificationToken ? null : publicStoreSlugFromPath(window.location.pathname)
   const isRegister = mode === 'register'
   const isAdmin = Boolean(user && isPlatformAdmin(user))
   const ownerStore = myStores.find((store) => store.membership?.role === 'owner')
@@ -54,7 +72,31 @@ function App() {
     setMyStores((stores) => stores.map((store) => store.id === updatedStore.id
       ? { ...updatedStore, membership: store.membership }
       : store))
+    setSelectedPlatformStore((store) => store?.id === updatedStore.id ? updatedStore : store)
   }, [])
+
+  const refreshImageAccessToken = useCallback<ImageTokenRefresh>(async (expiredToken) => {
+    const currentSession = loadAuthSession()
+    if (!currentSession || currentSession.user.id !== user?.id) throw new Error('Your session has expired. Sign in again to view this image.')
+    if (currentSession.access_token !== expiredToken) {
+      setAccessToken(currentSession.access_token)
+      return currentSession.access_token
+    }
+    if (imageRefreshPromise.current) return imageRefreshPromise.current
+
+    const refreshRequest = refreshAuth(currentSession.refresh_token).then(({ access_token: refreshedToken }) => {
+      const nextSession = { ...currentSession, access_token: refreshedToken }
+      saveAuthSession(nextSession)
+      setAccessToken(refreshedToken)
+      return refreshedToken
+    }).finally(() => { imageRefreshPromise.current = null })
+    imageRefreshPromise.current = refreshRequest
+    return refreshRequest
+  }, [user?.id])
+
+  useEffect(() => {
+    clearProductImageCache()
+  }, [user?.id])
 
   async function completeAuth(auth: { user: User; access_token: string; refresh_token: string }) {
     setPendingVerificationEmail(null)
@@ -63,6 +105,7 @@ function App() {
     setAccessToken(auth.access_token)
     setMyStores([])
     setSelectedStoreId(null)
+    setSelectedPlatformStore(null)
     setMemberStoresResolved(false)
     setMemberStoresError(null)
     setDashboardContext(isPlatformAdmin(auth.user) ? 'platform' : 'customer')
@@ -88,6 +131,11 @@ function App() {
     let cancelled = false
 
     async function restoreSession() {
+      if (publicStoreSlug) {
+        if (!cancelled) setBootstrapping(false)
+        return
+      }
+
       const verificationToken = new URLSearchParams(window.location.search).get('email_verification_token')
 
       if (verificationToken) {
@@ -130,6 +178,8 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (publicStoreSlug) return undefined
+
     async function handleStorage(event: StorageEvent) {
       if (event.key !== authSessionKey) return
       if (!event.newValue) {
@@ -137,6 +187,7 @@ function App() {
         setAccessToken(null)
         setMyStores([])
         setSelectedStoreId(null)
+        setSelectedPlatformStore(null)
         setMemberStoresResolved(false)
         setPendingVerificationEmail(null)
         setPendingNotice(null)
@@ -249,6 +300,7 @@ function App() {
     setAccessToken(null)
     setMyStores([])
     setSelectedStoreId(null)
+    setSelectedPlatformStore(null)
     setMemberStoresResolved(false)
     setMemberStoresError(null)
     setDashboardContext('customer')
@@ -264,6 +316,8 @@ function App() {
     clearAuthSession()
   }
 
+  if (publicStoreSlug) return <Suspense fallback={<ScreenLoading />}><PublicStorefrontRoute slug={publicStoreSlug} /></Suspense>
+
   if (bootstrapping) {
     if (isInvitationRoute) {
       return <Box sx={{ minHeight: '100svh', display: 'grid', placeItems: 'center', bgcolor: 'background.default' }}><Typography color="text.secondary">Checking your account…</Typography></Box>
@@ -276,13 +330,13 @@ function App() {
   }
 
   if (isInvitationRoute && !user) {
-    return <><StoreOnboarding token={invitationToken} user={null} accessToken={null} /><Container maxWidth="sm" sx={{ pb: 4 }}><AuthCard mode={mode} email={email} password={password} loading={loading} error={error} success={success} turnstileSiteKey={turnstileSiteKey || null} turnstileToken={turnstileToken} onEmailChange={setEmail} onPasswordChange={setPassword} onModeChange={handleModeChange} onTurnstileTokenChange={setTurnstileToken} onSubmit={handleAuth} heading={mode === 'register' ? 'Create an account to continue' : 'Sign in to continue'} description="Your invitation link will stay available while you sign in or create an account." /></Container></>
+    return <Suspense fallback={<ScreenLoading />}><><StoreOnboarding token={invitationToken} user={null} accessToken={null} /><Container maxWidth="sm" sx={{ pb: 4 }}><AuthCard mode={mode} email={email} password={password} loading={loading} error={error} success={success} turnstileSiteKey={turnstileSiteKey || null} turnstileToken={turnstileToken} onEmailChange={setEmail} onPasswordChange={setPassword} onModeChange={handleModeChange} onTurnstileTokenChange={setTurnstileToken} onSubmit={handleAuth} heading={mode === 'register' ? 'Create an account to continue' : 'Sign in to continue'} description="Your invitation link will stay available while you sign in or create an account." /></Container></></Suspense>
   }
 
-  if (isInvitationRoute && user) return <StoreOnboarding token={invitationToken} user={user} accessToken={accessToken} />
+  if (isInvitationRoute && user) return <Suspense fallback={<ScreenLoading />}><StoreOnboarding token={invitationToken} user={user} accessToken={accessToken} /></Suspense>
 
   if (!user) {
-    return <Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, md: 5 } }}><Container maxWidth="lg"><Stack spacing={4} sx={{ alignItems: 'center' }}><LandingPage onStartJourney={() => handleModeChange('register')} onHaveAccount={() => handleModeChange('login')} /><AuthCard mode={mode} email={email} password={password} loading={loading} error={error} success={success} turnstileSiteKey={turnstileSiteKey || null} turnstileToken={turnstileToken} onEmailChange={setEmail} onPasswordChange={setPassword} onModeChange={handleModeChange} onTurnstileTokenChange={setTurnstileToken} onSubmit={handleAuth} /></Stack></Container></Box>
+    return <Suspense fallback={<ScreenLoading />}><Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, md: 5 } }}><Container maxWidth="lg"><Stack spacing={4} sx={{ alignItems: 'center' }}><LandingPage onStartJourney={() => handleModeChange('register')} onHaveAccount={() => handleModeChange('login')} /><AuthCard mode={mode} email={email} password={password} loading={loading} error={error} success={success} turnstileSiteKey={turnstileSiteKey || null} turnstileToken={turnstileToken} onEmailChange={setEmail} onPasswordChange={setPassword} onModeChange={handleModeChange} onTurnstileTokenChange={setTurnstileToken} onSubmit={handleAuth} /></Stack></Container></Box></Suspense>
   }
 
   if (!isAdmin && !memberStoresResolved) {
@@ -293,6 +347,26 @@ function App() {
     if (activeSection === 'invitations') {
       if (dashboardContext !== 'platform' || !isAdmin || !accessToken) return <Alert severity="error">You do not have access to invitations.</Alert>
       return <StoreInvitations accessToken={accessToken} />
+    }
+    if (activeSection === 'products') {
+      if (!accessToken) return null
+      if (dashboardContext === 'platform' && isAdmin && selectedStoreId !== null) {
+        if (!memberStoresResolved) return <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', py: 4 }}><CircularProgress size={24} aria-label="Loading your store permissions" /><Typography color="text.secondary">Loading your store permissions…</Typography></Stack>
+        return <StoreCatalogManagement
+          accessToken={accessToken}
+          stores={myStores}
+          scope="platform"
+          platformStoreId={selectedStoreId}
+          platformStore={selectedPlatformStore}
+          userId={user?.id}
+          refreshAccessToken={refreshImageAccessToken}
+          onBack={() => setActiveSection('dashboard')}
+        />
+      }
+      if (dashboardContext === 'store' && (dashboardMembershipRole === 'owner' || dashboardMembershipRole === 'admin')) {
+        return <StoreCatalogManagement accessToken={accessToken} stores={myStores} scope="member" initialStoreId={selectedStoreId ?? ownerStore?.id ?? null} userId={user?.id} refreshAccessToken={refreshImageAccessToken} />
+      }
+      return <Alert severity="error">You do not have access to product management.</Alert>
     }
     if (activeSection !== 'dashboard') return <Alert severity="info">This section is coming soon.</Alert>
     if (!accessToken) return null
@@ -305,20 +379,23 @@ function App() {
           key={`${user?.id ?? 'guest'}-${selectedStoreId}-platform`}
           storeId={selectedStoreId}
           accessToken={accessToken}
-          source={hasManagerMembership ? 'member' : 'platform'}
+          source="platform"
           editable={hasManagerMembership}
-          onBack={() => setSelectedStoreId(null)}
+          membershipRole={selectedMembership}
+          cacheScope={`user-${user?.id ?? 'unknown'}`}
+          refreshAccessToken={refreshImageAccessToken}
+          onBack={() => { setSelectedStoreId(null); setSelectedPlatformStore(null) }}
           onStoreUpdated={handleStoreUpdated}
         />
       }
       return <Stack spacing={3}>
         <Card><CardContent sx={{ p: { xs: 2.5, sm: 4 } }}><Typography variant="h4" component="h2" gutterBottom>Platform dashboard</Typography><Typography color="text.secondary">All stores across the platform, including draft and suspended stores.</Typography></CardContent></Card>
-        <Box><Typography variant="h5" component="h2" sx={{ mb: 2 }}>All stores</Typography><StoreDirectory kind="platform" accessToken={accessToken} onSelectStore={(store) => setSelectedStoreId(store.id)} /></Box>
+        <Box><Typography variant="h5" component="h2" sx={{ mb: 2 }}>All stores</Typography><StoreDirectory kind="platform" accessToken={accessToken} onSelectStore={(store) => { setSelectedStoreId(store.id); setSelectedPlatformStore(store) }} /></Box>
       </Stack>
     }
 
     if (dashboardContext === 'store' && ownerStore) {
-      return <StoreDetailsPanel key={`${user?.id ?? 'guest'}-${ownerStore.id}-member`} storeId={ownerStore.id} accessToken={accessToken} source="member" editable onStoreUpdated={handleStoreUpdated} />
+      return <StoreDetailsPanel key={`${user?.id ?? 'guest'}-${ownerStore.id}-member`} storeId={ownerStore.id} accessToken={accessToken} source="member" editable cacheScope={`user-${user?.id ?? 'unknown'}`} refreshAccessToken={refreshImageAccessToken} onStoreUpdated={handleStoreUpdated} />
     }
 
     if (dashboardContext === 'store' || dashboardContext === 'employee') {
@@ -327,7 +404,7 @@ function App() {
         {dashboardContext === 'store' && primaryMembershipRole === 'admin' ? (
           selectedStoreId === null
             ? <StoreDirectory kind="member" accessToken={accessToken} onSelectStore={(store) => setSelectedStoreId(store.id)} />
-            : <StoreDetailsPanel key={`${user?.id ?? 'guest'}-${selectedStoreId}-member`} storeId={selectedStoreId} accessToken={accessToken} source="member" editable onBack={() => setSelectedStoreId(null)} backLabel="Back to My Stores" onStoreUpdated={handleStoreUpdated} />
+            : <StoreDetailsPanel key={`${user?.id ?? 'guest'}-${selectedStoreId}-member`} storeId={selectedStoreId} accessToken={accessToken} source="member" editable cacheScope={`user-${user?.id ?? 'unknown'}`} refreshAccessToken={refreshImageAccessToken} onBack={() => setSelectedStoreId(null)} backLabel="Back to My Stores" onStoreUpdated={handleStoreUpdated} />
         ) : <StoreDirectory kind="member" accessToken={accessToken} />}
       </Stack>
     }
@@ -335,15 +412,16 @@ function App() {
     return <Card><CardContent sx={{ p: { xs: 2.5, sm: 4 } }}><Stack spacing={1.5}><Typography variant="h4" component="h2">Welcome to Store Platform</Typography><Typography color="text.secondary">Store browsing and ordering will be available here in a future update.</Typography></Stack></CardContent></Card>
   }
 
-  return <DashboardLayout email={user.email} role={user.role} context={dashboardContext} storeRole={dashboardMembershipRole} canSwitchContext={isAdmin && myStores.length > 0} isPlatformAdmin={isAdmin} activeSection={activeSection} onContextChange={(context) => { setDashboardContext(context); setSelectedStoreId(null); setActiveSection('dashboard') }} onNavigate={(section) => { setError(null); setSuccess(null); setActiveSection(section) }} onLogout={handleLogout}>
+  return <Suspense fallback={<ScreenLoading />}><DashboardLayout email={user.email} role={user.role} context={dashboardContext} storeRole={dashboardMembershipRole} canSwitchContext={isAdmin && myStores.length > 0} isPlatformAdmin={isAdmin} showPlatformCatalog={dashboardContext === 'platform' && selectedStoreId !== null} activeSection={activeSection} onContextChange={(context) => { setDashboardContext(context); setSelectedStoreId(null); setSelectedPlatformStore(null); setActiveSection('dashboard') }} onNavigate={(section) => { setError(null); setSuccess(null); setActiveSection(section) }} onLogout={handleLogout}>
     <Stack spacing={3}>
       {invitationContextMissing && <Alert severity="info">Email verified. To continue store setup, reopen the original invitation link from the person who invited you.</Alert>}
       {error && <Alert severity="error">{error}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}
       {memberStoresError && <Alert severity="warning" action={<Button color="inherit" size="small" onClick={() => { setMemberStoresResolved(false); setMemberStoresAttempt((attempt) => attempt + 1) }}>Retry</Button>}>Could not load your store membership: {memberStoresError}</Alert>}
-      {renderDashboard()}
+      <Suspense fallback={<SectionLoading />}>{renderDashboard()}</Suspense>
     </Stack>
   </DashboardLayout>
+  </Suspense>
 }
 
 function readInvitationToken(pathname: string) {

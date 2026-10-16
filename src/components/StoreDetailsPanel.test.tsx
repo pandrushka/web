@@ -1,13 +1,21 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { StoreProfile } from '../api/stores'
-import { fetchAdminStore, fetchStore, updateStore } from '../api/stores'
+import { fetchAdminStore, fetchStore, publishStore, unpublishStore, updateStore } from '../api/stores'
+import { fetchCategories, fetchProducts } from '../api/catalog'
 import { StoreDetailsPanel } from './StoreDetailsPanel'
 
 vi.mock('../api/stores', () => ({
   fetchAdminStore: vi.fn(),
   fetchStore: vi.fn(),
   updateStore: vi.fn(),
+  publishStore: vi.fn(),
+  unpublishStore: vi.fn(),
+}))
+
+vi.mock('../api/catalog', () => ({
+  fetchCategories: vi.fn().mockResolvedValue({ categories: [] }),
+  fetchProducts: vi.fn().mockResolvedValue({ products: [] }),
 }))
 
 const store: StoreProfile = {
@@ -55,6 +63,44 @@ describe('StoreDetailsPanel', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
+  it('previews a draft store from the owner endpoint and returns to store management', async () => {
+    vi.mocked(fetchStore).mockResolvedValue({ store })
+    vi.mocked(fetchCategories).mockResolvedValue({ categories: [{ id: 3, name: 'Bebidas', position: 1, active: true, created_at: '', updated_at: '' }] })
+    vi.mocked(fetchProducts).mockResolvedValue({ products: [{ id: 20, name: 'Soda', description: null, price: '10.25', unit: 'unidad', available: true, active: true, category_id: 3, category: { id: 3, name: 'Bebidas', active: true }, created_at: '', updated_at: '' }] })
+    render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={vi.fn()} />)
+
+    expect(await screen.findByRole('heading', { name: store.name })).toBeInTheDocument()
+    expect(fetchStore).toHaveBeenCalledWith('owner-token', 5)
+    fireEvent.click(screen.getByRole('button', { name: 'Preview Store' }))
+    expect(await screen.findByText('Preview — Not Published')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(fetchCategories).toHaveBeenCalledWith('owner-token', 5, 'member')
+      expect(fetchProducts).toHaveBeenCalledWith('owner-token', 5, 'member')
+    })
+    expect(await screen.findByText('Soda')).toBeInTheDocument()
+    expect(screen.getByText('C$ 10.25')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: store.name })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Return to Dashboard' }))
+    expect(await screen.findByRole('button', { name: /edit store details/i })).toBeInTheDocument()
+  })
+
+  it('previews any store through the platform endpoint without granting edit controls', async () => {
+    vi.mocked(fetchAdminStore).mockResolvedValue({ store: { ...store, membership: undefined } })
+    render(<StoreDetailsPanel storeId={5} accessToken="platform-token" source="platform" editable={false} onStoreUpdated={vi.fn()} />)
+
+    expect(await screen.findByRole('heading', { name: store.name })).toBeInTheDocument()
+    expect(fetchAdminStore).toHaveBeenCalledWith('platform-token', 5)
+    expect(screen.queryByRole('button', { name: /edit store details/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Preview Store' }))
+    expect(await screen.findByText('Preview — Not Published')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(fetchCategories).toHaveBeenCalledWith('platform-token', 5, 'platform')
+      expect(fetchProducts).toHaveBeenCalledWith('platform-token', 5, 'platform')
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Return to Dashboard' }))
+    expect(await screen.findByRole('button', { name: 'Preview Store' })).toBeInTheDocument()
+  })
+
   it('shows forbidden, missing, and retryable general errors', async () => {
     vi.mocked(fetchAdminStore).mockRejectedValueOnce(new Error('Forbidden'))
     const { rerender } = render(<StoreDetailsPanel storeId={9} accessToken="platform-token" source="platform" editable={false} onStoreUpdated={vi.fn()} />)
@@ -70,5 +116,61 @@ describe('StoreDetailsPanel', () => {
     vi.mocked(fetchAdminStore).mockResolvedValueOnce({ store })
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('heading', { name: store.name })).toBeInTheDocument()
+  })
+
+  it('shows owner publication controls, confirms publishing, refreshes status, and exposes the public link', async () => {
+    vi.mocked(fetchStore).mockResolvedValue({ store })
+    vi.mocked(publishStore).mockResolvedValue({ store: { ...store, status: 'active' } })
+    const onStoreUpdated = vi.fn()
+    render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={onStoreUpdated} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish Store' }))
+    expect(await screen.findByRole('dialog', { name: 'Publish this store?' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(publishStore).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Store' }))
+    fireEvent.click(screen.getByRole('dialog').querySelector('button:last-child')!)
+    await waitFor(() => expect(publishStore).toHaveBeenCalledWith('owner-token', 5))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await screen.findByText('Store published.')).toBeInTheDocument()
+    expect(onStoreUpdated).toHaveBeenLastCalledWith({ ...store, status: 'active' })
+    expect(screen.getByRole('button', { name: 'Unpublish Store' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Public Store' })).toHaveAttribute('href', '/pulperia-centro')
+  })
+
+  it('does not show publication actions to admins or platform-only users', async () => {
+    vi.mocked(fetchStore).mockResolvedValue({ store: { ...store, membership: { role: 'admin' } } })
+    const { rerender } = render(<StoreDetailsPanel storeId={5} accessToken="admin-token" source="member" editable onStoreUpdated={vi.fn()} />)
+    expect(await screen.findByRole('button', { name: /edit store details/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Publish Store' })).not.toBeInTheDocument()
+
+    vi.mocked(fetchAdminStore).mockResolvedValue({ store: { ...store, membership: undefined } })
+    rerender(<StoreDetailsPanel storeId={5} accessToken="platform-token" source="platform" editable={false} onStoreUpdated={vi.fn()} />)
+    expect(await screen.findByRole('heading', { name: store.name })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Publish Store' })).not.toBeInTheDocument()
+  })
+
+  it('allows dual-role owners to publish through member endpoints while viewing platform data', async () => {
+    vi.mocked(fetchAdminStore).mockResolvedValue({ store: { ...store, membership: undefined } })
+    vi.mocked(publishStore).mockResolvedValue({ store: { ...store, status: 'active', membership: { role: 'owner' } } })
+    render(<StoreDetailsPanel storeId={5} accessToken="dual-token" source="platform" editable={false} membershipRole="owner" onStoreUpdated={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish Store' }))
+    fireEvent.click(screen.getByRole('dialog').querySelector('button:last-child')!)
+    await waitFor(() => expect(publishStore).toHaveBeenCalledWith('dual-token', 5))
+  })
+
+  it('shows publication failures and provides active store links', async () => {
+    vi.mocked(fetchStore).mockResolvedValue({ store: { ...store, status: 'active' } })
+    vi.mocked(unpublishStore).mockRejectedValue(new Error('Forbidden'))
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Unpublish Store' }))
+    fireEvent.click(screen.getByRole('dialog').querySelector('button:last-child')!)
+    expect(await screen.findByText('Forbidden')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Store Link' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/pulperia-centro`))
+    expect(screen.getByRole('link', { name: 'Open Public Store' })).toHaveAttribute('href', '/pulperia-centro')
   })
 })

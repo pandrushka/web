@@ -1,10 +1,11 @@
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
+export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}) {
+  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...init.headers,
     },
   })

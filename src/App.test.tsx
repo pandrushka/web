@@ -30,9 +30,34 @@ const storeApi = vi.hoisted(() => ({
   createStoreFromInvitation: vi.fn(),
 }))
 
+const catalogApi = vi.hoisted(() => ({
+  archiveCategory: vi.fn(), archiveProduct: vi.fn(), createCategory: vi.fn(), createProduct: vi.fn(),
+  fetchCategories: vi.fn(), fetchProducts: vi.fn(), updateCategory: vi.fn(), updateProduct: vi.fn(),
+  PRODUCT_UNITS: ['unidad', 'libra', 'kilogramo', 'gramo', 'litro', 'paquete', 'docena'],
+}))
+
+const publicStorefrontApi = vi.hoisted(() => ({
+  fetchPublicStore: vi.fn(),
+  fetchPublicCategories: vi.fn(),
+  fetchPublicProducts: vi.fn(),
+  fetchPublicProductImage: vi.fn(),
+}))
+
 vi.mock('./api/auth', () => authApi)
 vi.mock('./api/onboarding', () => onboardingApi)
 vi.mock('./api/stores', () => storeApi)
+vi.mock('./api/catalog', () => catalogApi)
+vi.mock('./api/publicStorefront', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./api/publicStorefront')>()),
+  ...publicStorefrontApi,
+}))
+
+import { PublicStorefrontApiError } from './api/publicStorefront'
+
+const ownedStore = {
+  id: 8, name: 'Pulpería Centro', slug: 'pulperia-centro', description: null, logo_initial: 'P', phone_number: null,
+  city: 'León', address: null, directions: null, status: 'draft', membership: { role: 'owner' },
+}
 
 const userAuthResponse: AuthResponse = {
   user: {
@@ -63,10 +88,65 @@ beforeEach(() => {
   storeApi.updateStore.mockReset()
   storeApi.validateStoreInvitation.mockReset().mockResolvedValue({ valid: true, expires_at: '2026-10-19T10:00:00Z' })
   storeApi.createStoreFromInvitation.mockReset()
+  catalogApi.fetchCategories.mockReset().mockResolvedValue({ categories: [] })
+  catalogApi.fetchProducts.mockReset().mockResolvedValue({ products: [] })
+  catalogApi.createCategory.mockReset()
+  catalogApi.updateCategory.mockReset()
+  catalogApi.archiveCategory.mockReset()
+  catalogApi.createProduct.mockReset()
+  catalogApi.updateProduct.mockReset()
+  catalogApi.archiveProduct.mockReset()
+  publicStorefrontApi.fetchPublicStore.mockReset()
+  publicStorefrontApi.fetchPublicCategories.mockReset().mockResolvedValue({ categories: [] })
+  publicStorefrontApi.fetchPublicProducts.mockReset().mockResolvedValue({ products: [], pagination: { page: 1, per_page: 24, total_count: 0, total_pages: 0 } })
+  publicStorefrontApi.fetchPublicProductImage.mockReset()
   window.history.replaceState({}, '', '/')
 })
 
 describe('App auth shell', () => {
+  it('shows the same customer-friendly not-found page for a private store without restoring an auth session', async () => {
+    window.localStorage.setItem('forme.auth.session', JSON.stringify(userAuthResponse))
+    publicStorefrontApi.fetchPublicStore.mockRejectedValue(new PublicStorefrontApiError('Store not found', 404))
+    window.history.replaceState({}, '', '/draft-market')
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Store not found' })).toBeInTheDocument()
+    expect(screen.getByText(/this store isn’t available/i)).toBeInTheDocument()
+    expect(publicStorefrontApi.fetchPublicStore).toHaveBeenCalledWith('draft-market')
+    expect(publicStorefrontApi.fetchPublicCategories).not.toHaveBeenCalled()
+    expect(publicStorefrontApi.fetchPublicProducts).not.toHaveBeenCalled()
+    expect(authApi.refreshAuth).not.toHaveBeenCalled()
+    expect(storeApi.fetchStore).not.toHaveBeenCalled()
+    expect(storeApi.fetchAdminStore).not.toHaveBeenCalled()
+    expect(storeApi.fetchMyStores).not.toHaveBeenCalled()
+  })
+
+  it('loads an active public storefront anonymously without dashboard navigation', async () => {
+    window.localStorage.setItem('forme.auth.session', JSON.stringify(userAuthResponse))
+    publicStorefrontApi.fetchPublicStore.mockResolvedValue({ store: { name: 'Pulpería Estrada', slug: 'pulperia-estrada', logo_initial: 'P', description: 'Open daily', city: 'León' } })
+    publicStorefrontApi.fetchPublicCategories.mockResolvedValue({ categories: [{ id: 1, name: 'Bebidas', position: 0 }] })
+    publicStorefrontApi.fetchPublicProducts.mockResolvedValue({ products: [], pagination: { page: 1, per_page: 24, total_count: 0, total_pages: 0 } })
+    window.history.replaceState({}, '', '/pulperia-estrada')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Pulpería Estrada' })).toBeInTheDocument()
+    expect(screen.getByText('León')).toBeInTheDocument()
+    expect(screen.getByText('Open daily')).toBeInTheDocument()
+    expect(screen.getByText('No products are available yet.')).toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    expect(screen.queryByText(/preview — not published/i)).not.toBeInTheDocument()
+    expect(publicStorefrontApi.fetchPublicCategories).toHaveBeenCalledWith('pulperia-estrada')
+    expect(publicStorefrontApi.fetchPublicProducts).toHaveBeenCalledWith('pulperia-estrada')
+    expect(authApi.refreshAuth).not.toHaveBeenCalled()
+    expect(storeApi.fetchMyStores).not.toHaveBeenCalled()
+    act(() => window.dispatchEvent(new StorageEvent('storage', {
+      key: 'forme.auth.session',
+      newValue: JSON.stringify(userAuthResponse),
+    })))
+    expect(storeApi.fetchMyStores).not.toHaveBeenCalled()
+  })
+
   it('logs in, stores the session, and shows the neutral customer dashboard', async () => {
     authApi.login.mockResolvedValue(userAuthResponse)
 
@@ -276,8 +356,7 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Store details' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Nica Market' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Nica Market' })).toBeInTheDocument()
     expect(screen.getByText('Masaya')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /edit store details/i })).toBeInTheDocument()
     expect(storeApi.fetchStore).toHaveBeenCalledWith('owner-token', 9)
@@ -360,18 +439,82 @@ describe('App auth shell', () => {
     authApi.refreshAuth.mockResolvedValue({ access_token: 'dual-token' })
     storeApi.fetchMyStores.mockResolvedValue({ stores: [ownStore] })
     storeApi.fetchAllStores.mockResolvedValue({ stores: [ownStore, otherStore], pagination: { page: 1, per_page: 25, total_count: 2, total_pages: 1 } })
-    storeApi.fetchStore.mockResolvedValue({ store: ownStore })
+    storeApi.fetchAdminStore.mockResolvedValue({ store: ownStore })
     storeApi.fetchAdminStore.mockResolvedValue({ store: otherStore })
 
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByRole('button', { name: 'View My Store details' }))
     expect(await screen.findByRole('button', { name: /edit store details/i })).toBeInTheDocument()
-    expect(storeApi.fetchStore).toHaveBeenCalledWith('dual-token', 9)
+    expect(storeApi.fetchAdminStore).toHaveBeenCalledWith('dual-token', 9)
     await user.click(screen.getByRole('button', { name: 'Back to All Stores' }))
     await user.click(screen.getByRole('button', { name: 'View Other Store details' }))
     expect(await screen.findByRole('heading', { name: 'Other Store' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /edit store details/i })).not.toBeInTheDocument()
     expect(storeApi.fetchAdminStore).toHaveBeenCalledWith('dual-token', 10)
+  })
+
+  it('opens product management for a store owner through member-scoped endpoints', async () => {
+    const ownerSession = { ...userAuthResponse, user: { ...userAuthResponse.user, email_verified_at: '2026-10-12T10:00:00Z' } }
+    window.localStorage.setItem('forme.auth.session', JSON.stringify(ownerSession))
+    authApi.refreshAuth.mockResolvedValue({ access_token: 'owner-access' })
+    storeApi.fetchMyStores.mockResolvedValue({ stores: [ownedStore] })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await screen.findByRole('button', { name: /edit store details/i })
+    await user.click(screen.getByRole('button', { name: /open navigation/i }))
+    await user.click(screen.getByRole('button', { name: 'Products' }))
+
+    expect(await screen.findByRole('heading', { name: 'Products & categories' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(catalogApi.fetchCategories).toHaveBeenCalledWith('owner-access', 8, 'member')
+      expect(catalogApi.fetchProducts).toHaveBeenCalledWith('owner-access', 8, 'member')
+    })
+    expect(screen.getByRole('button', { name: 'Add product' })).toBeEnabled()
+  })
+
+  it('lets a platform-only user inspect a selected store through read-only platform endpoints', async () => {
+    const platformSession = { ...userAuthResponse, user: { ...userAuthResponse.user, role: 'platform_admin', email_verified_at: '2026-10-12T10:00:00Z' } }
+    window.localStorage.setItem('forme.auth.session', JSON.stringify(platformSession))
+    authApi.refreshAuth.mockResolvedValue({ access_token: 'platform-access' })
+    storeApi.fetchAllStores.mockResolvedValue({ stores: [ownedStore], pagination: { page: 1, per_page: 25, total_count: 1, total_pages: 1 } })
+    storeApi.fetchAdminStore.mockResolvedValue({ store: { ...ownedStore, membership: undefined } })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View Pulpería Centro details' }))
+    await screen.findByRole('heading', { name: 'Pulpería Centro' })
+    await user.click(screen.getByRole('button', { name: /open navigation/i }))
+    await user.click(screen.getByRole('button', { name: 'Products & Categories' }))
+
+    expect(await screen.findByText(/read-only platform view/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(catalogApi.fetchCategories).toHaveBeenCalledWith('platform-access', 8, 'platform')
+      expect(catalogApi.fetchProducts).toHaveBeenCalledWith('platform-access', 8, 'platform')
+    })
+    expect(screen.queryByRole('button', { name: 'Add product' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Back to store details' })).toBeInTheDocument()
+  })
+
+  it('preserves a dual-role owner membership when switching from platform to store context', async () => {
+    const dualSession = { ...userAuthResponse, user: { ...userAuthResponse.user, role: 'platform_admin', email_verified_at: '2026-10-12T10:00:00Z' } }
+    window.localStorage.setItem('forme.auth.session', JSON.stringify(dualSession))
+    authApi.refreshAuth.mockResolvedValue({ access_token: 'dual-access' })
+    storeApi.fetchMyStores.mockResolvedValue({ stores: [ownedStore] })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await screen.findByText('All stores')
+    await user.click(screen.getByRole('button', { name: /open navigation/i }))
+    await user.click(screen.getByRole('combobox', { name: /context/i }))
+    await user.click(await screen.findByRole('option', { name: 'Store Owner' }))
+    await screen.findByRole('button', { name: /edit store details/i })
+    await user.click(screen.getByRole('button', { name: /open navigation/i }))
+    await user.click(screen.getByRole('button', { name: 'Products' }))
+
+    expect(await screen.findByRole('button', { name: 'Add product' })).toBeEnabled()
+    expect(catalogApi.fetchCategories).toHaveBeenCalledWith('dual-access', 8, 'member')
+    expect(storeApi.fetchAdminStore).not.toHaveBeenCalled()
   })
 })

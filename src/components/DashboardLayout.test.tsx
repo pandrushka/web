@@ -39,7 +39,8 @@ describe('DashboardLayout', () => {
     expect(screen.getByRole('button', { name: /store owner dashboard/i })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByText('Store Owner')).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: /context/i })).not.toBeInTheDocument()
-    for (const item of ['Products', 'Orders', 'Sales', 'Store Settings']) {
+    expect(screen.getByRole('button', { name: 'Products' })).toBeEnabled()
+    for (const item of ['Orders', 'Sales', 'Store Settings']) {
       expect(screen.getByRole('button', { name: new RegExp(`${item} coming soon`, 'i') })).toHaveAttribute('aria-disabled', 'true')
     }
     expect(screen.queryByRole('button', { name: /create.*store/i })).not.toBeInTheDocument()

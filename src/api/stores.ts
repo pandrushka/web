@@ -80,6 +80,20 @@ export function updateStore(accessToken: string, storeId: number, changes: Store
   })
 }
 
+export function publishStore(accessToken: string, storeId: number) {
+  return apiRequest<StoreProfileResponse>(`/api/v1/stores/${storeId}/publish`, {
+    method: 'POST',
+    headers: authorizationHeaders(accessToken),
+  })
+}
+
+export function unpublishStore(accessToken: string, storeId: number) {
+  return apiRequest<StoreProfileResponse>(`/api/v1/stores/${storeId}/unpublish`, {
+    method: 'POST',
+    headers: authorizationHeaders(accessToken),
+  })
+}
+
 export function validateStoreInvitation(token: string, accessToken: string) {
   return apiRequest<{ valid: true; expires_at: string }>('/api/v1/store_invitations/validate', {
     method: 'POST',
