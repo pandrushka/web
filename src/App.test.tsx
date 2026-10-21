@@ -154,12 +154,12 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/email/i)
-    await user.type(screen.getByLabelText(/email/i), 'andrey@example.com')
-    await user.type(screen.getByLabelText(/password/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
+    await screen.findByLabelText(/correo electrónico/i)
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/contraseña/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^iniciar sesión$/i }))
 
-    await waitFor(() => expect(screen.getByText(/welcome to store platform/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/welcome to tu pulpería/i)).toBeInTheDocument())
     expect(screen.getByText(/store browsing and ordering/i)).toBeInTheDocument()
     expect(authApi.login).toHaveBeenCalledWith('andrey@example.com', 'password123')
     expect(onboardingApi.fetchQuestions).not.toHaveBeenCalled()
@@ -188,10 +188,10 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/email/i)
-    await user.type(screen.getByLabelText(/email/i), 'andrey@example.com')
-    await user.type(screen.getByLabelText(/password/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
+    await screen.findByLabelText(/correo electrónico/i)
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/contraseña/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^iniciar sesión$/i }))
 
     await screen.findByText(/need to validate email/i)
     await user.click(screen.getByRole('button', { name: /resend email/i }))
@@ -216,10 +216,10 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/email/i)
-    await user.type(screen.getByLabelText(/email/i), 'andrey@example.com')
-    await user.type(screen.getByLabelText(/password/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
+    await screen.findByLabelText(/correo electrónico/i)
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/contraseña/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^iniciar sesión$/i }))
     await screen.findByText(/need to validate email/i)
 
     window.dispatchEvent(
@@ -229,7 +229,7 @@ describe('App auth shell', () => {
       }),
     )
 
-    await waitFor(() => expect(screen.getByText(/welcome to store platform/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/welcome to tu pulpería/i)).toBeInTheDocument())
     expect(onboardingApi.fetchQuestions).not.toHaveBeenCalled()
   })
 
@@ -240,13 +240,20 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/email/i)
-    await user.click(screen.getByRole('button', { name: /need an account\? create one/i }))
-    await user.type(screen.getByLabelText(/email/i), 'andrey@example.com')
-    await user.type(screen.getByLabelText(/password/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /create account/i }))
+    await screen.findByLabelText(/correo electrónico/i)
+    await user.click(screen.getByRole('tab', { name: /crear cuenta/i }))
+    await user.type(screen.getByLabelText(/nombre/i), 'Ana')
+    await user.type(screen.getByLabelText(/apellido/i), 'López')
+    await user.type(screen.getByLabelText(/número de teléfono/i), '88881234')
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
+    await user.type(screen.getAllByLabelText(/contraseña/i)[0], 'password123')
+    await user.type(screen.getByLabelText(/confirmar contraseña/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^crear cuenta$/i }))
 
     await screen.findByText(/need to validate email/i)
+    expect(authApi.register).toHaveBeenCalledWith('andrey@example.com', 'password123', null, {
+      first_name: 'Ana', last_name: 'López', phone_number: '88881234',
+    })
     expect(window.localStorage.getItem('forme.auth.session')).toBeNull()
   })
 
@@ -256,7 +263,7 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await waitFor(() => expect(screen.getByText(/welcome to store platform/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/welcome to tu pulpería/i)).toBeInTheDocument())
     expect(authApi.refreshAuth).toHaveBeenCalledWith('refresh-token-1')
     expect(onboardingApi.fetchQuestions).not.toHaveBeenCalled()
   })
@@ -267,7 +274,7 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await waitFor(() => expect(screen.getByText(/welcome to store platform/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/welcome to tu pulpería/i)).toBeInTheDocument())
     expect(authApi.verifyEmail).toHaveBeenCalledWith('verify-token-1')
     expect(onboardingApi.fetchQuestions).not.toHaveBeenCalled()
   })

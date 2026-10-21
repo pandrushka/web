@@ -1,4 +1,5 @@
 export type AuthMode = 'login' | 'register'
+export type RegistrationProfile = { first_name: string; last_name: string; phone_number: string }
 
 export type User = {
   id: number
