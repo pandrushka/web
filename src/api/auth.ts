@@ -1,10 +1,16 @@
 import { apiRequest } from './client'
 import type { AuthResponse, LoginResponse, RegisterResponse } from '../types/auth'
+import type { RegistrationProfile } from '../types/auth'
 
-export function register(email: string, password: string, turnstileToken: string | null) {
+export function register(
+  email: string,
+  password: string,
+  turnstileToken: string | null,
+  profile?: RegistrationProfile,
+) {
   return apiRequest<RegisterResponse>('/api/v1/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ email, password, turnstile_token: turnstileToken }),
+    body: JSON.stringify({ email, password, turnstile_token: turnstileToken, ...profile }),
   })
 }
 

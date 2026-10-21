@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Container, Stack, Step, StepLabel, Stepper, TextField, Typography } from '@mui/material'
 import { createStoreFromInvitation, validateStoreInvitation } from '../api/stores'
+import { TuPulperiaLogo } from './TuPulperiaLogo'
 import type { StoreAttributes, StoreCreationResponse } from '../api/stores'
 import type { User } from '../types/auth'
 
@@ -287,7 +288,7 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
 }
 
 function Page({ children }: { children: ReactNode }) {
-  return <Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, sm: 5 } }}><Container maxWidth="sm">{children}</Container></Box>
+  return <Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, sm: 5 } }}><Container maxWidth="sm"><Box sx={{ mb: { xs: 3, sm: 4 } }}><TuPulperiaLogo variant="horizontal" size="small" /></Box>{children}</Container></Box>
 }
 
 export { suggestSlug }

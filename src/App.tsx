@@ -7,7 +7,8 @@ import type { StoreProfile } from './api/stores'
 import type { DashboardContext, DashboardSection, StoreRole } from './components/DashboardLayout'
 import { LandingPage } from './components/LandingPage'
 import { PendingVerificationPanel } from './components/PendingVerificationPanel'
-import type { AuthMode, User } from './types/auth'
+import type { AuthMode, RegistrationProfile, User } from './types/auth'
+import { type AuthLocale } from './i18n/authCopy'
 import { authSessionKey, clearAuthSession, loadAuthSession, saveAuthSession } from './utils/authSession'
 import { isPlatformAdmin } from './utils/auth'
 import { dashboardRoleLabel } from './utils/roleLabels'
@@ -38,6 +39,8 @@ function App() {
   const [dashboardContext, setDashboardContext] = useState<DashboardContext>('customer')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [registrationProfile, setRegistrationProfile] = useState<RegistrationProfile>({ first_name: '', last_name: '', phone_number: '' })
+  const [authLocale, setAuthLocale] = useState<AuthLocale>('es')
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -236,16 +239,17 @@ function App() {
     return () => { cancelled = true }
   }, [accessToken, isInvitationRoute, memberStoresAttempt, user?.id, user?.role])
 
-  async function handleAuth(event: FormEvent<HTMLFormElement>) {
+  async function handleAuth(event: FormEvent<HTMLFormElement>, profile?: RegistrationProfile) {
     event.preventDefault()
     setError(null)
     setSuccess(null)
     setLoading(true)
     try {
       if (isRegister) {
-        const response = await register(email, password, turnstileSiteKey ? turnstileToken : null)
+        const response = await register(email, password, turnstileSiteKey ? turnstileToken : null, profile)
         setPassword('')
         setTurnstileToken(null)
+        setRegistrationProfile({ first_name: '', last_name: '', phone_number: '' })
         setPendingVerificationEmail(email.trim().toLowerCase())
         setPendingNotice(response.message)
       } else {
@@ -322,7 +326,7 @@ function App() {
     if (isInvitationRoute) {
       return <Box sx={{ minHeight: '100svh', display: 'grid', placeItems: 'center', bgcolor: 'background.default' }}><Typography color="text.secondary">Checking your account…</Typography></Box>
     }
-    return <Box sx={{ minHeight: '100svh', bgcolor: 'background.default' }}><Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}><Stack spacing={3} sx={{ alignItems: 'center' }}><LandingPage onStartJourney={() => handleModeChange('register')} onHaveAccount={() => handleModeChange('login')} /></Stack></Container></Box>
+    return <Box sx={{ minHeight: '100svh', bgcolor: 'background.default' }}><Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}><Stack spacing={3} sx={{ alignItems: 'center' }}><LandingPage locale={authLocale} /></Stack></Container></Box>
   }
 
   if (pendingVerificationEmail) {
@@ -336,7 +340,7 @@ function App() {
   if (isInvitationRoute && user) return <Suspense fallback={<ScreenLoading />}><StoreOnboarding token={invitationToken} user={user} accessToken={accessToken} /></Suspense>
 
   if (!user) {
-    return <Suspense fallback={<ScreenLoading />}><Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, md: 5 } }}><Container maxWidth="lg"><Stack spacing={4} sx={{ alignItems: 'center' }}><LandingPage onStartJourney={() => handleModeChange('register')} onHaveAccount={() => handleModeChange('login')} /><AuthCard mode={mode} email={email} password={password} loading={loading} error={error} success={success} turnstileSiteKey={turnstileSiteKey || null} turnstileToken={turnstileToken} onEmailChange={setEmail} onPasswordChange={setPassword} onModeChange={handleModeChange} onTurnstileTokenChange={setTurnstileToken} onSubmit={handleAuth} /></Stack></Container></Box></Suspense>
+    return <Suspense fallback={<ScreenLoading />}><Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, md: 5 } }}><Container maxWidth="lg"><Stack spacing={{ xs: 3, md: 4 }} sx={{ alignItems: 'center' }}><LandingPage locale={authLocale} /><AuthCard mode={mode} email={email} password={password} loading={loading} error={error} success={success} turnstileSiteKey={turnstileSiteKey || null} turnstileToken={turnstileToken} onEmailChange={setEmail} onPasswordChange={setPassword} onModeChange={handleModeChange} onTurnstileTokenChange={setTurnstileToken} onSubmit={handleAuth} customerExperience locale={authLocale} onLocaleChange={setAuthLocale} registrationProfile={registrationProfile} onRegistrationProfileChange={setRegistrationProfile} /></Stack></Container></Box></Suspense>
   }
 
   if (!isAdmin && !memberStoresResolved) {
@@ -409,7 +413,7 @@ function App() {
       </Stack>
     }
 
-    return <Card><CardContent sx={{ p: { xs: 2.5, sm: 4 } }}><Stack spacing={1.5}><Typography variant="h4" component="h2">Welcome to Store Platform</Typography><Typography color="text.secondary">Store browsing and ordering will be available here in a future update.</Typography></Stack></CardContent></Card>
+    return <Card><CardContent sx={{ p: { xs: 2.5, sm: 4 } }}><Stack spacing={1.5}><Typography variant="h4" component="h2">Welcome to Tu Pulpería</Typography><Typography color="text.secondary">Store browsing and ordering will be available here in a future update.</Typography></Stack></CardContent></Card>
   }
 
   return <Suspense fallback={<ScreenLoading />}><DashboardLayout email={user.email} role={user.role} context={dashboardContext} storeRole={dashboardMembershipRole} canSwitchContext={isAdmin && myStores.length > 0} isPlatformAdmin={isAdmin} showPlatformCatalog={dashboardContext === 'platform' && selectedStoreId !== null} activeSection={activeSection} onContextChange={(context) => { setDashboardContext(context); setSelectedStoreId(null); setSelectedPlatformStore(null); setActiveSection('dashboard') }} onNavigate={(section) => { setError(null); setSuccess(null); setActiveSection(section) }} onLogout={handleLogout}>

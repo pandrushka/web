@@ -9,7 +9,7 @@ describe('publicStoreSlugFromPath', () => {
 
   it.each([
     '/', '/invite/token', '/invite', '/login', '/register', '/manage', '/manage/stores', '/admin', '/admin/stores',
-    '/api', '/auth/callback', '/verify-email', '/onboarding', '/stores', '/favicon.svg', '/Uppercase', '/bad%2Fslug',
+    '/api', '/auth/callback', '/verify-email', '/onboarding', '/stores', '/favicon.ico', '/Uppercase', '/bad%2Fslug',
   ])('does not treat protected or invalid route %s as a public store', (path) => {
     expect(publicStoreSlugFromPath(path)).toBeNull()
   })

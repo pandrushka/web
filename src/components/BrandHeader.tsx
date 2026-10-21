@@ -1,5 +1,5 @@
-import { BrandLogo } from './BrandLogo'
+import { TuPulperiaLogo } from './TuPulperiaLogo'
 
 export function BrandHeader() {
-  return <BrandLogo compact />
+  return <TuPulperiaLogo variant="horizontal" size="small" />
 }

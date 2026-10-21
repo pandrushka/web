@@ -114,7 +114,8 @@ describe('DashboardLayout', () => {
     })) })
     render(<DashboardLayout email="owner@example.com" role="store_admin" context="store" storeRole="admin" canSwitchContext={false} isPlatformAdmin={false} activeSection="dashboard" onContextChange={vi.fn()} onNavigate={vi.fn()} onLogout={vi.fn()}><div>Page</div></DashboardLayout>)
 
-    expect(screen.getByRole('heading', { name: 'Store Platform' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go to dashboard' }).querySelector('img')).toHaveAttribute('src', '/branding/tu-pulperia-logo-light.png')
+    expect(screen.getByRole('heading', { name: 'Store Admin Dashboard' })).toBeInTheDocument()
     expect(screen.getByText('owner@example.com')).toBeInTheDocument()
     expect(screen.getByText('Store Admin')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /open account menu for owner@example.com/i })).toBeInTheDocument()
@@ -127,13 +128,38 @@ describe('DashboardLayout', () => {
     render(<DashboardLayout email="mobile@example.com" role="member" context="customer" storeRole={null} canSwitchContext={false} isPlatformAdmin={false} activeSection="dashboard" onContextChange={vi.fn()} onNavigate={vi.fn()} onLogout={vi.fn()}><div>Page</div></DashboardLayout>)
 
     expect(screen.getAllByRole('button', { name: /open account menu/i })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /open navigation/i }).nextElementSibling?.querySelector('img')).toHaveAttribute('src', '/branding/tu-pulperia-icon.png')
     await user.click(screen.getByRole('button', { name: /open navigation/i }))
     expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
+    expect(document.querySelector('.MuiDrawer-paper img')).toHaveAttribute('src', '/branding/tu-pulperia-logo-light.png')
     await user.click(screen.getByRole('button', { name: 'Customer Dashboard' }))
     await user.click(await screen.findByRole('button', { name: /open account menu for mobile@example.com/i }))
     expect(screen.getByRole('menu')).toBeInTheDocument()
     expect(screen.getAllByRole('menuitem', { name: /log out/i })).toHaveLength(1)
     await user.keyboard('{Escape}')
     expect(screen.getByRole('button', { name: /open navigation/i })).toBeInTheDocument()
+  })
+
+  it('uses the icon-only logo in a collapsed desktop sidebar and restores the wordmark when expanded', async () => {
+    const user = userEvent.setup()
+    const onContextChange = vi.fn()
+    const originalMatchMedia = window.matchMedia
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn((query: string) => ({
+      matches: query.includes('min-width:900px'), media: query, onchange: null,
+      addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+    })) })
+    render(<DashboardLayout email="admin@example.com" role="platform_admin" context="platform" storeRole="owner" canSwitchContext isPlatformAdmin activeSection="dashboard" onContextChange={onContextChange} onNavigate={vi.fn()} onLogout={vi.fn()}><div>Page</div></DashboardLayout>)
+
+    const logo = screen.getByRole('button', { name: 'Go to dashboard' }).querySelector('img')
+    expect(logo).toHaveAttribute('src', '/branding/tu-pulperia-logo-light.png')
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }))
+    expect(logo).toHaveAttribute('src', '/branding/tu-pulperia-icon.png')
+    expect(screen.getByRole('button', { name: 'Invitations' })).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: /context/i }))
+    await user.click(await screen.findByRole('option', { name: 'Store Owner' }))
+    expect(onContextChange).toHaveBeenCalledWith('store')
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }))
+    expect(logo).toHaveAttribute('src', '/branding/tu-pulperia-logo-light.png')
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia })
   })
 })
