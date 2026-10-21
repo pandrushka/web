@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { apiRequest, authorizationHeaders } from './client'
+import { ApiRequestError, apiRequest, authorizationHeaders } from './client'
 
 const server = setupServer(
   http.get('http://localhost:3000/api/v1/ping', ({ request }) => {
@@ -10,6 +10,9 @@ const server = setupServer(
   }),
   http.get('http://localhost:3000/api/v1/fail', () =>
     HttpResponse.json({ error: 'Not allowed' }, { status: 401 }),
+  ),
+  http.post('http://localhost:3000/api/v1/rate-limited', () =>
+    HttpResponse.json({ error: 'Try later', retry_after_seconds: 60 }, { status: 429, headers: { 'Retry-After': '60' } }),
   ),
 )
 
@@ -28,5 +31,13 @@ describe('apiRequest', () => {
 
   it('throws the api error message for non-2xx responses', async () => {
     await expect(apiRequest('/api/v1/fail')).rejects.toThrow('Not allowed')
+  })
+
+  it('preserves status and retry timing for rate-limited responses', async () => {
+    await expect(apiRequest('/api/v1/rate-limited', { method: 'POST' })).rejects.toMatchObject<ApiRequestError>({
+      status: 429,
+      retryAfterSeconds: 60,
+      message: 'Try later',
+    })
   })
 })
