@@ -15,7 +15,12 @@ export type StoreInvitation = {
 }
 
 export type StoreInvitationsResponse = { invitations: StoreInvitation[] }
-export type CreateStoreInvitationResponse = { invitation: StoreInvitation; token: string }
+export type InvitationEmailDeliveryStatus = 'sent' | 'failed' | 'not_requested'
+export type CreateStoreInvitationResponse = {
+  invitation: StoreInvitation
+  token: string
+  email_delivery_status: InvitationEmailDeliveryStatus
+}
 
 export function fetchStoreInvitations(accessToken: string) {
   return apiRequest<StoreInvitationsResponse>('/api/v1/admin/store_invitations', {

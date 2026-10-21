@@ -57,7 +57,7 @@ describe('StoreInvitations', () => {
 
   it('creates an open invitation and shows its token link only until dialog dismissal', async () => {
     const user = userEvent.setup()
-    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'one-time-token' })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'one-time-token', email_delivery_status: 'not_requested' })
     render(<StoreInvitations accessToken="jwt" />)
     await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
@@ -65,6 +65,8 @@ describe('StoreInvitations', () => {
     const link = await screen.findByLabelText('Invitation link')
     expect(link).toHaveValue(`${window.location.origin}/invite/one-time-token`)
     expect(screen.getByText(/expires in seven days/i)).toBeInTheDocument()
+    expect(screen.getByText('Invitación creada. Copia el enlace para compartirlo.')).toBeInTheDocument()
+    expect(screen.queryByText('Invitación creada y correo enviado.')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByDisplayValue(/one-time-token/)).not.toBeInTheDocument()
     expect(window.localStorage.length).toBe(0)
@@ -72,7 +74,7 @@ describe('StoreInvitations', () => {
 
   it('validates email and supports recipient-restricted invitation creation', async () => {
     const user = userEvent.setup()
-    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: { ...pendingInvitation, recipient_email: 'buyer@example.com' }, token: 'secret' })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: { ...pendingInvitation, recipient_email: 'buyer@example.com' }, token: 'secret', email_delivery_status: 'sent' })
     render(<StoreInvitations accessToken="jwt" />)
     await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
     await user.type(screen.getByLabelText('Recipient email (optional)'), 'wrong-email')
@@ -83,6 +85,7 @@ describe('StoreInvitations', () => {
     await user.type(screen.getByLabelText('Recipient email (optional)'), 'buyer@example.com')
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
     await screen.findByLabelText('Invitation link')
+    expect(await screen.findByText('Invitación creada y correo enviado.')).toBeInTheDocument()
     expect(createStoreInvitation).toHaveBeenCalledWith('jwt', 'buyer@example.com')
   })
 
@@ -90,7 +93,7 @@ describe('StoreInvitations', () => {
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'copy-token' })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'copy-token', email_delivery_status: 'not_requested' })
     render(<StoreInvitations accessToken="jwt" />)
     await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
@@ -127,6 +130,22 @@ describe('StoreInvitations', () => {
     await user.click(await screen.findByRole('button', { name: /revoke invitation for open invitation/i }))
     await user.click(screen.getByRole('button', { name: 'Revoke invitation' }))
     expect(await screen.findByText('Not allowed')).toBeInTheDocument()
+  })
+
+  it('keeps copy link available when the invitation is created but email delivery fails', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: { ...pendingInvitation, recipient_email: 'buyer@example.com' }, token: 'manual-share-token', email_delivery_status: 'failed' })
+    render(<StoreInvitations accessToken="jwt" />)
+    await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
+    await user.type(screen.getByLabelText('Recipient email (optional)'), 'buyer@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create invitation' }))
+
+    expect(await screen.findByText('La invitación fue creada, pero no se pudo enviar el correo. Puedes copiar el enlace y compartirlo manualmente.')).toBeInTheDocument()
+    expect(screen.queryByText('Invitación creada y correo enviado.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Copy Link' }))
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/invite/manual-share-token`)
   })
 
   it('renders invitation cards at mobile widths', async () => {

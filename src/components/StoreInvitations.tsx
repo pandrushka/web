@@ -10,7 +10,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined'
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { useTheme } from '@mui/material/styles'
 import { createStoreInvitation, fetchStoreInvitations, revokeStoreInvitation } from '../api/storeInvitations'
-import type { StoreInvitation } from '../api/storeInvitations'
+import type { InvitationEmailDeliveryStatus, StoreInvitation } from '../api/storeInvitations'
 
 type Props = { accessToken: string }
 type CreatedLink = { token: string; url: string }
@@ -47,6 +47,7 @@ export function StoreInvitations({ accessToken }: Props) {
   const [createError, setCreateError] = useState('')
   const [creating, setCreating] = useState(false)
   const [createdLink, setCreatedLink] = useState<CreatedLink | null>(null)
+  const [emailDeliveryStatus, setEmailDeliveryStatus] = useState<InvitationEmailDeliveryStatus | null>(null)
   const [copyMessage, setCopyMessage] = useState('')
   const [revokeTarget, setRevokeTarget] = useState<StoreInvitation | null>(null)
   const [revokingId, setRevokingId] = useState<number | null>(null)
@@ -74,6 +75,7 @@ export function StoreInvitations({ accessToken }: Props) {
     setCreateError('')
     setCreating(false)
     setCreatedLink(null)
+    setEmailDeliveryStatus(null)
     setCopyMessage('')
   }
 
@@ -90,6 +92,7 @@ export function StoreInvitations({ accessToken }: Props) {
     try {
       const response = await createStoreInvitation(accessToken, normalizedEmail || undefined)
       setCreatedLink({ token: response.token, url: `${window.location.origin}/invite/${encodeURIComponent(response.token)}` })
+      setEmailDeliveryStatus(response.email_delivery_status ?? (normalizedEmail ? 'failed' : 'not_requested'))
       await load()
     } catch (error) {
       setCreateError(getErrorMessage(error))
@@ -172,7 +175,12 @@ export function StoreInvitations({ accessToken }: Props) {
           <DialogTitle id="new-invitation-title">{createdLink ? 'Invitation created' : 'Create store invitation'}</DialogTitle>
           <DialogContent>
             {createdLink ? <Stack spacing={2} sx={{ pt: 1 }}>
-              <Alert severity="success">This invitation can be used once to create one store. It expires in seven days.</Alert>
+              <Alert severity={emailDeliveryStatus === 'failed' ? 'warning' : 'success'}>
+                {emailDeliveryStatus === 'sent' && 'Invitación creada y correo enviado.'}
+                {emailDeliveryStatus === 'not_requested' && 'Invitación creada. Copia el enlace para compartirlo.'}
+                {emailDeliveryStatus === 'failed' && 'La invitación fue creada, pero no se pudo enviar el correo. Puedes copiar el enlace y compartirlo manualmente.'}
+              </Alert>
+              <Alert severity="info">This invitation can be used once to create one store. It expires in seven days.</Alert>
               <TextField label="Invitation link" value={createdLink.url} fullWidth slotProps={{ htmlInput: { readOnly: true } }} />
               <Button variant="outlined" startIcon={<ContentCopyOutlinedIcon />} onClick={() => void handleCopy()} sx={{ minHeight: 48 }}>Copy Link</Button>
               {copyMessage && <Alert severity={copyMessage.startsWith('Invitation') ? 'success' : 'error'}>{copyMessage}</Alert>}
