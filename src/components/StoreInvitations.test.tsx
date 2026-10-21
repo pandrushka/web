@@ -2,12 +2,14 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StoreInvitations } from './StoreInvitations'
-import { createStoreInvitation, fetchStoreInvitations, revokeStoreInvitation } from '../api/storeInvitations'
+import { ApiRequestError } from '../api/client'
+import { createStoreInvitation, fetchStoreInvitations, resendStoreInvitation, revokeStoreInvitation } from '../api/storeInvitations'
 
 vi.mock('../api/storeInvitations', () => ({
   fetchStoreInvitations: vi.fn(),
   createStoreInvitation: vi.fn(),
   revokeStoreInvitation: vi.fn(),
+  resendStoreInvitation: vi.fn(),
 }))
 
 const pendingInvitation = {
@@ -19,6 +21,8 @@ const pendingInvitation = {
   redeemed_by_id: null,
   redeemed_at: null,
   revoked_at: null,
+  last_resent_at: null,
+  last_delivery_status: 'sent' as const,
   created_at: '2026-10-13T12:00:00Z',
 }
 
@@ -27,6 +31,7 @@ describe('StoreInvitations', () => {
     vi.mocked(fetchStoreInvitations).mockReset()
     vi.mocked(createStoreInvitation).mockReset()
     vi.mocked(revokeStoreInvitation).mockReset()
+    vi.mocked(resendStoreInvitation).mockReset()
     vi.mocked(fetchStoreInvitations).mockResolvedValue({ invitations: [] })
   })
 
@@ -57,7 +62,7 @@ describe('StoreInvitations', () => {
 
   it('creates an open invitation and shows its token link only until dialog dismissal', async () => {
     const user = userEvent.setup()
-    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'one-time-token' })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'one-time-token', email_delivery_status: 'not_requested' })
     render(<StoreInvitations accessToken="jwt" />)
     await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
@@ -65,6 +70,8 @@ describe('StoreInvitations', () => {
     const link = await screen.findByLabelText('Invitation link')
     expect(link).toHaveValue(`${window.location.origin}/invite/one-time-token`)
     expect(screen.getByText(/expires in seven days/i)).toBeInTheDocument()
+    expect(screen.getByText('Invitación creada. Copia el enlace para compartirlo.')).toBeInTheDocument()
+    expect(screen.queryByText('Invitación creada y correo enviado.')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByDisplayValue(/one-time-token/)).not.toBeInTheDocument()
     expect(window.localStorage.length).toBe(0)
@@ -72,7 +79,7 @@ describe('StoreInvitations', () => {
 
   it('validates email and supports recipient-restricted invitation creation', async () => {
     const user = userEvent.setup()
-    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: { ...pendingInvitation, recipient_email: 'buyer@example.com' }, token: 'secret' })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: { ...pendingInvitation, recipient_email: 'buyer@example.com' }, token: 'secret', email_delivery_status: 'sent' })
     render(<StoreInvitations accessToken="jwt" />)
     await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
     await user.type(screen.getByLabelText('Recipient email (optional)'), 'wrong-email')
@@ -83,6 +90,7 @@ describe('StoreInvitations', () => {
     await user.type(screen.getByLabelText('Recipient email (optional)'), 'buyer@example.com')
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
     await screen.findByLabelText('Invitation link')
+    expect(await screen.findByText('Invitación creada y correo enviado.')).toBeInTheDocument()
     expect(createStoreInvitation).toHaveBeenCalledWith('jwt', 'buyer@example.com')
   })
 
@@ -90,7 +98,7 @@ describe('StoreInvitations', () => {
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'copy-token' })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: pendingInvitation, token: 'copy-token', email_delivery_status: 'not_requested' })
     render(<StoreInvitations accessToken="jwt" />)
     await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
@@ -127,6 +135,76 @@ describe('StoreInvitations', () => {
     await user.click(await screen.findByRole('button', { name: /revoke invitation for open invitation/i }))
     await user.click(screen.getByRole('button', { name: 'Revoke invitation' }))
     expect(await screen.findByText('Not allowed')).toBeInTheDocument()
+  })
+
+  it('keeps copy link available when the invitation is created but email delivery fails', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    vi.mocked(createStoreInvitation).mockResolvedValue({ invitation: { ...pendingInvitation, recipient_email: 'buyer@example.com' }, token: 'manual-share-token', email_delivery_status: 'failed' })
+    render(<StoreInvitations accessToken="jwt" />)
+    await user.click(await screen.findByRole('button', { name: 'New Invitation' }))
+    await user.type(screen.getByLabelText('Recipient email (optional)'), 'buyer@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create invitation' }))
+
+    expect(await screen.findByText('La invitación fue creada, pero no se pudo enviar el correo. Puedes copiar el enlace y compartirlo manualmente.')).toBeInTheDocument()
+    expect(screen.queryByText('Invitación creada y correo enviado.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Copy Link' }))
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/invite/manual-share-token`)
+  })
+
+  it('confirms a resend, prevents duplicate submissions, and refreshes after success', async () => {
+    const user = userEvent.setup()
+    const emailedInvitation = { ...pendingInvitation, recipient_email: 'owner@example.test' }
+    vi.mocked(fetchStoreInvitations).mockResolvedValue({ invitations: [emailedInvitation] })
+    let resolveResend: ((value: { invitation: typeof emailedInvitation; email_delivery_status: 'sent' }) => void) | undefined
+    vi.mocked(resendStoreInvitation).mockImplementationOnce(() => new Promise((resolve) => { resolveResend = resolve }))
+    render(<StoreInvitations accessToken="jwt" />)
+
+    await user.click(await screen.findByRole('button', { name: 'Resend Invitation' }))
+    expect(screen.getByText('¿Deseas reenviar esta invitación a owner@example.test?')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Reenviar invitación' }))
+    const sendingButton = await screen.findByRole('button', { name: 'Sending invitation' })
+    expect(sendingButton).toBeDisabled()
+    expect(resendStoreInvitation).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+    resolveResend?.({ invitation: emailedInvitation, email_delivery_status: 'sent' })
+
+    expect(await screen.findByText('La invitación se ha enviado nuevamente.')).toBeInTheDocument()
+    expect(resendStoreInvitation).toHaveBeenCalledWith('jwt', emailedInvitation.id)
+    expect(fetchStoreInvitations).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows delivery failure without a false success and offers retry for failed invitations', async () => {
+    const user = userEvent.setup()
+    const emailedInvitation = { ...pendingInvitation, recipient_email: 'owner@example.test', last_delivery_status: 'failed' as const }
+    vi.mocked(fetchStoreInvitations).mockResolvedValue({ invitations: [emailedInvitation] })
+    vi.mocked(resendStoreInvitation).mockResolvedValue({ invitation: emailedInvitation, email_delivery_status: 'failed' })
+    render(<StoreInvitations accessToken="jwt" />)
+
+    await user.click(await screen.findByRole('button', { name: 'Retry Email' }))
+    await user.click(screen.getByRole('button', { name: 'Reenviar invitación' }))
+    expect(await screen.findByText('No se pudo enviar el correo. Inténtalo de nuevo.')).toBeInTheDocument()
+    expect(screen.queryByText('La invitación se ha enviado nuevamente.')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Retry Email' })).toBeInTheDocument()
+  })
+
+  it('shows retry timing for rate limits and explains expired invitations need renewal', async () => {
+    const user = userEvent.setup()
+    const emailedInvitation = { ...pendingInvitation, recipient_email: 'owner@example.test' }
+    const expiredInvitation = { ...pendingInvitation, id: 10, recipient_email: 'expired@example.test', status: 'expired' as const }
+    vi.mocked(fetchStoreInvitations).mockResolvedValue({ invitations: [emailedInvitation, expiredInvitation] })
+    vi.mocked(resendStoreInvitation).mockRejectedValue(new ApiRequestError('Try again later', 429, 60))
+    render(<StoreInvitations accessToken="jwt" />)
+
+    await user.click(await screen.findByRole('button', { name: 'Resend Invitation' }))
+    await user.click(screen.getByRole('button', { name: 'Reenviar invitación' }))
+    expect(await screen.findAllByText(/Límite de reenvíos alcanzado/)).toHaveLength(1)
+    expect(await screen.findByRole('button', { name: /Reintentar en (?:1 min|\d+s)/ })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Renewal required' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Renewal required' })).toHaveAttribute('title', expect.stringContaining('Renewal is required'))
   })
 
   it('renders invitation cards at mobile widths', async () => {

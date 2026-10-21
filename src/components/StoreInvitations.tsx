@@ -9,8 +9,9 @@ import {
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined'
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { useTheme } from '@mui/material/styles'
-import { createStoreInvitation, fetchStoreInvitations, revokeStoreInvitation } from '../api/storeInvitations'
-import type { StoreInvitation } from '../api/storeInvitations'
+import { ApiRequestError } from '../api/client'
+import { createStoreInvitation, fetchStoreInvitations, resendStoreInvitation, revokeStoreInvitation } from '../api/storeInvitations'
+import type { InvitationEmailDeliveryStatus, StoreInvitation } from '../api/storeInvitations'
 
 type Props = { accessToken: string }
 type CreatedLink = { token: string; url: string }
@@ -24,6 +25,15 @@ function statusColor(status: StoreInvitation['status']): 'success' | 'warning' |
   if (status === 'expired') return 'warning'
   if (status === 'revoked') return 'error'
   return 'default'
+}
+
+function formatRetry(seconds: number) {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes ? `${hours} h ${remainingMinutes} min` : `${hours} h`
 }
 
 function formatDate(value: string) {
@@ -47,9 +57,14 @@ export function StoreInvitations({ accessToken }: Props) {
   const [createError, setCreateError] = useState('')
   const [creating, setCreating] = useState(false)
   const [createdLink, setCreatedLink] = useState<CreatedLink | null>(null)
+  const [emailDeliveryStatus, setEmailDeliveryStatus] = useState<InvitationEmailDeliveryStatus | null>(null)
   const [copyMessage, setCopyMessage] = useState('')
   const [revokeTarget, setRevokeTarget] = useState<StoreInvitation | null>(null)
   const [revokingId, setRevokingId] = useState<number | null>(null)
+  const [resendTarget, setResendTarget] = useState<StoreInvitation | null>(null)
+  const [resendingId, setResendingId] = useState<number | null>(null)
+  const [resendCooldowns, setResendCooldowns] = useState<Record<number, number>>({})
+  const [resendError, setResendError] = useState('')
   const [actionError, setActionError] = useState('')
   const [actionMessage, setActionMessage] = useState('')
 
@@ -68,12 +83,25 @@ export function StoreInvitations({ accessToken }: Props) {
 
   useEffect(() => { void load() }, [attempt, load])
 
+  useEffect(() => {
+    if (Object.keys(resendCooldowns).length === 0) return undefined
+    const timer = window.setInterval(() => {
+      setResendCooldowns((current) => Object.fromEntries(
+        Object.entries(current)
+          .map(([id, seconds]) => [Number(id), seconds - 1] as const)
+          .filter(([, seconds]) => seconds > 0),
+      ))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [resendCooldowns])
+
   function clearCreateDialog() {
     setCreateOpen(false)
     setRecipientEmail('')
     setCreateError('')
     setCreating(false)
     setCreatedLink(null)
+    setEmailDeliveryStatus(null)
     setCopyMessage('')
   }
 
@@ -90,6 +118,7 @@ export function StoreInvitations({ accessToken }: Props) {
     try {
       const response = await createStoreInvitation(accessToken, normalizedEmail || undefined)
       setCreatedLink({ token: response.token, url: `${window.location.origin}/invite/${encodeURIComponent(response.token)}` })
+      setEmailDeliveryStatus(response.email_delivery_status ?? (normalizedEmail ? 'failed' : 'not_requested'))
       await load()
     } catch (error) {
       setCreateError(getErrorMessage(error))
@@ -126,6 +155,49 @@ export function StoreInvitations({ accessToken }: Props) {
     }
   }
 
+  async function handleResend() {
+    if (!resendTarget || resendTarget.status !== 'pending' || !resendTarget.recipient_email || resendingId !== null) return
+    const target = resendTarget
+    const cooldown = resendCooldowns[target.id] ?? 0
+    if (cooldown > 0) return
+
+    setResendingId(target.id)
+    setResendError('')
+    setActionMessage('')
+    try {
+      const response = await resendStoreInvitation(accessToken, target.id)
+      setResendTarget(null)
+      if (response.email_delivery_status === 'sent') {
+        setActionMessage('La invitación se ha enviado nuevamente.')
+      } else {
+        setActionError('No se pudo enviar el correo. Inténtalo de nuevo.')
+      }
+      await load()
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 429 && error.retryAfterSeconds) {
+        setResendCooldowns((current) => ({ ...current, [target.id]: error.retryAfterSeconds! }))
+        setResendError(`Límite de reenvíos alcanzado. Intenta de nuevo en ${formatRetry(error.retryAfterSeconds)}.`)
+      } else {
+        setResendError(getErrorMessage(error))
+      }
+    } finally {
+      setResendingId(null)
+    }
+  }
+
+  function resendButton(invitation: StoreInvitation) {
+    if (invitation.status === 'expired') {
+      return <Button disabled title="Renewal is required before this invitation can be resent." sx={{ minHeight: 44 }}>Renewal required</Button>
+    }
+    if (invitation.status !== 'pending' || !invitation.recipient_email) return null
+
+    const cooldown = resendCooldowns[invitation.id] ?? 0
+    const label = cooldown > 0
+      ? `Retry in ${formatRetry(cooldown)}`
+      : invitation.last_delivery_status === 'failed' ? 'Retry Email' : 'Resend Invitation'
+    return <Button onClick={() => { setResendError(''); setResendTarget(invitation) }} disabled={resendingId !== null || cooldown > 0} sx={{ minHeight: 44 }}>{label}</Button>
+  }
+
   const invitationRows = (cardMode: boolean) => invitations.map((invitation) => (
     cardMode ? (
       <Card key={invitation.id} variant="outlined">
@@ -133,10 +205,11 @@ export function StoreInvitations({ accessToken }: Props) {
           <Stack spacing={1.5}>
             <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
               <Typography sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{invitation.recipient_email || 'Open invitation'}</Typography>
-              <Chip size="small" label={statusLabel(invitation.status)} color={statusColor(invitation.status)} />
+              <Chip size="small" label={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'Delivery failed' : statusLabel(invitation.status)} color={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'warning' : statusColor(invitation.status)} />
             </Stack>
             <Typography variant="body2" color="text.secondary">Created {formatDate(invitation.created_at)}</Typography>
             <Typography variant="body2" color="text.secondary">Expires {formatDate(invitation.expires_at)}</Typography>
+            {resendButton(invitation)}
             {invitation.status === 'pending' && <Button startIcon={<DeleteOutlineOutlinedIcon />} color="error" onClick={() => setRevokeTarget(invitation)} sx={{ alignSelf: 'flex-start', minHeight: 44 }}>Revoke</Button>}
           </Stack>
         </CardContent>
@@ -146,8 +219,8 @@ export function StoreInvitations({ accessToken }: Props) {
         <TableCell>{invitation.recipient_email || 'Open invitation'}</TableCell>
         <TableCell>{formatDate(invitation.created_at)}</TableCell>
         <TableCell>{formatDate(invitation.expires_at)}</TableCell>
-        <TableCell><Chip size="small" label={statusLabel(invitation.status)} color={statusColor(invitation.status)} /></TableCell>
-        <TableCell align="right">{invitation.status === 'pending' && <IconButton aria-label={`Revoke invitation for ${invitation.recipient_email || 'Open invitation'}`} color="error" onClick={() => setRevokeTarget(invitation)}><DeleteOutlineOutlinedIcon /></IconButton>}</TableCell>
+        <TableCell><Chip size="small" label={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'Delivery failed' : statusLabel(invitation.status)} color={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'warning' : statusColor(invitation.status)} /></TableCell>
+        <TableCell align="right"><Stack direction="row" sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>{resendButton(invitation)}{invitation.status === 'pending' && <IconButton aria-label={`Revoke invitation for ${invitation.recipient_email || 'Open invitation'}`} color="error" onClick={() => setRevokeTarget(invitation)}><DeleteOutlineOutlinedIcon /></IconButton>}</Stack></TableCell>
       </TableRow>
     )
   ))
@@ -172,7 +245,12 @@ export function StoreInvitations({ accessToken }: Props) {
           <DialogTitle id="new-invitation-title">{createdLink ? 'Invitation created' : 'Create store invitation'}</DialogTitle>
           <DialogContent>
             {createdLink ? <Stack spacing={2} sx={{ pt: 1 }}>
-              <Alert severity="success">This invitation can be used once to create one store. It expires in seven days.</Alert>
+              <Alert severity={emailDeliveryStatus === 'failed' ? 'warning' : 'success'}>
+                {emailDeliveryStatus === 'sent' && 'Invitación creada y correo enviado.'}
+                {emailDeliveryStatus === 'not_requested' && 'Invitación creada. Copia el enlace para compartirlo.'}
+                {emailDeliveryStatus === 'failed' && 'La invitación fue creada, pero no se pudo enviar el correo. Puedes copiar el enlace y compartirlo manualmente.'}
+              </Alert>
+              <Alert severity="info">This invitation can be used once to create one store. It expires in seven days.</Alert>
               <TextField label="Invitation link" value={createdLink.url} fullWidth slotProps={{ htmlInput: { readOnly: true } }} />
               <Button variant="outlined" startIcon={<ContentCopyOutlinedIcon />} onClick={() => void handleCopy()} sx={{ minHeight: 48 }}>Copy Link</Button>
               {copyMessage && <Alert severity={copyMessage.startsWith('Invitation') ? 'success' : 'error'}>{copyMessage}</Alert>}
@@ -196,6 +274,20 @@ export function StoreInvitations({ accessToken }: Props) {
           <Button onClick={() => setRevokeTarget(null)} disabled={revokingId !== null}>Cancel</Button>
           <Button color="error" variant="contained" onClick={() => void handleRevoke()} disabled={revokingId !== null}>
             {revokingId !== null ? <CircularProgress size={20} color="inherit" /> : 'Revoke invitation'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(resendTarget)} onClose={() => resendingId === null && setResendTarget(null)} aria-labelledby="resend-invitation-title">
+        <DialogTitle id="resend-invitation-title">Resend invitation?</DialogTitle>
+        <DialogContent>
+          <Typography>¿Deseas reenviar esta invitación a {resendTarget?.recipient_email}?</Typography>
+          {resendError && <Alert severity="error" sx={{ mt: 2 }}>{resendError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setResendTarget(null)} disabled={resendingId !== null}>Cancel</Button>
+          <Button aria-label={resendingId !== null ? 'Sending invitation' : resendTarget && (resendCooldowns[resendTarget.id] ?? 0) > 0 ? `Reintentar en ${formatRetry(resendCooldowns[resendTarget.id])}` : 'Reenviar invitación'} variant="contained" onClick={() => void handleResend()} disabled={resendingId !== null || (resendTarget ? (resendCooldowns[resendTarget.id] ?? 0) > 0 : true)}>
+            {resendingId !== null ? <CircularProgress size={20} color="inherit" /> : resendTarget && (resendCooldowns[resendTarget.id] ?? 0) > 0 ? `Reintentar en ${formatRetry(resendCooldowns[resendTarget.id])}` : 'Reenviar invitación'}
           </Button>
         </DialogActions>
       </Dialog>
