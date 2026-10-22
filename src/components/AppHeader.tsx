@@ -3,6 +3,8 @@ import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined'
 import { AppBar, Avatar, Box, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material'
 import type { User } from '../types/auth'
 import { BrandHeader } from './BrandHeader'
+import { useAppTranslation } from '../i18n/useAppTranslation'
+import { isPlatformAdmin } from '../utils/auth'
 
 type AppHeaderProps = {
   user: User
@@ -11,6 +13,10 @@ type AppHeaderProps = {
 }
 
 export function AppHeader({ user, onMenuClick, onLogout }: AppHeaderProps) {
+  const { t } = useAppTranslation('dashboard')
+  const roleLabel = isPlatformAdmin(user)
+    ? t('roles.superAdmin')
+    : user.role === 'admin' ? t('roles.legacyAdmin') : t('roles.customer')
   return (
     <AppBar
       position="sticky"
@@ -19,8 +25,8 @@ export function AppHeader({ user, onMenuClick, onLogout }: AppHeaderProps) {
       sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}
     >
       <Toolbar sx={{ minHeight: 72, gap: 2 }}>
-        <Tooltip title="Open navigation">
-          <IconButton aria-label="Open navigation" onClick={onMenuClick}>
+        <Tooltip title={t('nav.open')}>
+          <IconButton aria-label={t('nav.open')} onClick={onMenuClick}>
             <MenuOutlinedIcon />
           </IconButton>
         </Tooltip>
@@ -36,11 +42,11 @@ export function AppHeader({ user, onMenuClick, onLogout }: AppHeaderProps) {
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
             <Typography sx={{ fontWeight: 700, lineHeight: 1.1 }}>{user.email}</Typography>
             <Typography variant="caption" color="text.secondary">
-              {user.role.replace('_', ' ')}
+              {roleLabel}
             </Typography>
           </Box>
-          <Tooltip title="Log out">
-            <IconButton aria-label="Log out" onClick={onLogout}>
+          <Tooltip title={t('actions.logOut', { ns: 'common' })}>
+            <IconButton aria-label={t('actions.logOut', { ns: 'common' })} onClick={onLogout}>
               <LogoutOutlinedIcon />
             </IconButton>
           </Tooltip>

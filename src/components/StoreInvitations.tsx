@@ -12,13 +12,11 @@ import { useTheme } from '@mui/material/styles'
 import { ApiRequestError } from '../api/client'
 import { createStoreInvitation, fetchStoreInvitations, resendStoreInvitation, revokeStoreInvitation } from '../api/storeInvitations'
 import type { InvitationEmailDeliveryStatus, StoreInvitation } from '../api/storeInvitations'
+import { useAppTranslation } from '../i18n/useAppTranslation'
+import type { TFunction } from 'i18next'
 
 type Props = { accessToken: string }
 type CreatedLink = { token: string; url: string }
-
-function statusLabel(status: StoreInvitation['status']) {
-  return status === 'pending' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1)
-}
 
 function statusColor(status: StoreInvitation['status']): 'success' | 'warning' | 'error' | 'default' {
   if (status === 'pending') return 'success'
@@ -27,25 +25,27 @@ function statusColor(status: StoreInvitation['status']): 'success' | 'warning' |
   return 'default'
 }
 
-function formatRetry(seconds: number) {
-  if (seconds < 60) return `${seconds}s`
+function formatRetry(seconds: number, t: TFunction<'invitations'>) {
+  if (seconds < 60) return t('duration.seconds', { count: seconds })
   const minutes = Math.ceil(seconds / 60)
-  if (minutes < 60) return `${minutes} min`
+  if (minutes < 60) return t('duration.minutes', { count: minutes })
   const hours = Math.floor(minutes / 60)
   const remainingMinutes = minutes % 60
-  return remainingMinutes ? `${hours} h ${remainingMinutes} min` : `${hours} h`
+  return remainingMinutes ? t('duration.hoursMinutes', { hours, minutes: remainingMinutes }) : t('duration.hours', { count: hours })
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, language?: string) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+  const locale = language === 'en' ? 'en-US' : 'es-NI'
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date)
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
 }
 
 export function StoreInvitations({ accessToken }: Props) {
+  const { t, i18n } = useAppTranslation('invitations')
   const theme = useTheme()
   const mobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [invitations, setInvitations] = useState<StoreInvitation[]>([])
@@ -59,6 +59,7 @@ export function StoreInvitations({ accessToken }: Props) {
   const [createdLink, setCreatedLink] = useState<CreatedLink | null>(null)
   const [emailDeliveryStatus, setEmailDeliveryStatus] = useState<InvitationEmailDeliveryStatus | null>(null)
   const [copyMessage, setCopyMessage] = useState('')
+  const [copyFailed, setCopyFailed] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<StoreInvitation | null>(null)
   const [revokingId, setRevokingId] = useState<number | null>(null)
   const [resendTarget, setResendTarget] = useState<StoreInvitation | null>(null)
@@ -75,11 +76,11 @@ export function StoreInvitations({ accessToken }: Props) {
       const response = await fetchStoreInvitations(accessToken)
       setInvitations(response.invitations)
     } catch (error) {
-      setLoadError(getErrorMessage(error))
+      setLoadError(getErrorMessage(error, t('requestError')))
     } finally {
       setLoading(false)
     }
-  }, [accessToken])
+  }, [accessToken, t])
 
   useEffect(() => { void load() }, [attempt, load])
 
@@ -103,6 +104,7 @@ export function StoreInvitations({ accessToken }: Props) {
     setCreatedLink(null)
     setEmailDeliveryStatus(null)
     setCopyMessage('')
+    setCopyFailed(false)
   }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -110,7 +112,7 @@ export function StoreInvitations({ accessToken }: Props) {
     if (creating || createdLink) return
     const normalizedEmail = recipientEmail.trim()
     if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setCreateError('Enter a valid email address or leave this field blank.')
+      setCreateError(t('emailInvalid'))
       return
     }
     setCreateError('')
@@ -121,7 +123,7 @@ export function StoreInvitations({ accessToken }: Props) {
       setEmailDeliveryStatus(response.email_delivery_status ?? (normalizedEmail ? 'failed' : 'not_requested'))
       await load()
     } catch (error) {
-      setCreateError(getErrorMessage(error))
+      setCreateError(getErrorMessage(error, t('requestError')))
     } finally {
       setCreating(false)
     }
@@ -131,9 +133,11 @@ export function StoreInvitations({ accessToken }: Props) {
     if (!createdLink) return
     try {
       await navigator.clipboard.writeText(createdLink.url)
-      setCopyMessage('Invitation link copied.')
+      setCopyMessage(t('copied'))
+      setCopyFailed(false)
     } catch {
-      setCopyMessage('Could not copy the link. Select and copy it manually.')
+      setCopyMessage(t('copyFailed'))
+      setCopyFailed(true)
     }
   }
 
@@ -146,10 +150,10 @@ export function StoreInvitations({ accessToken }: Props) {
     try {
       await revokeStoreInvitation(accessToken, target.id)
       setRevokeTarget(null)
-      setActionMessage('Invitation revoked.')
+      setActionMessage(t('revokedSuccess'))
       await load()
     } catch (error) {
-      setActionError(getErrorMessage(error))
+      setActionError(getErrorMessage(error, t('requestError')))
     } finally {
       setRevokingId(null)
     }
@@ -168,17 +172,17 @@ export function StoreInvitations({ accessToken }: Props) {
       const response = await resendStoreInvitation(accessToken, target.id)
       setResendTarget(null)
       if (response.email_delivery_status === 'sent') {
-        setActionMessage('La invitación se ha enviado nuevamente.')
+        setActionMessage(t('resendSuccess'))
       } else {
-        setActionError('No se pudo enviar el correo. Inténtalo de nuevo.')
+        setActionError(t('resendFailure'))
       }
       await load()
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 429 && error.retryAfterSeconds) {
         setResendCooldowns((current) => ({ ...current, [target.id]: error.retryAfterSeconds! }))
-        setResendError(`Límite de reenvíos alcanzado. Intenta de nuevo en ${formatRetry(error.retryAfterSeconds)}.`)
+        setResendError(t('rateLimit', { time: formatRetry(error.retryAfterSeconds, t) }))
       } else {
-        setResendError(getErrorMessage(error))
+        setResendError(getErrorMessage(error, t('requestError')))
       }
     } finally {
       setResendingId(null)
@@ -187,14 +191,14 @@ export function StoreInvitations({ accessToken }: Props) {
 
   function resendButton(invitation: StoreInvitation) {
     if (invitation.status === 'expired') {
-      return <Button disabled title="Renewal is required before this invitation can be resent." sx={{ minHeight: 44 }}>Renewal required</Button>
+      return <Button disabled title={t('renewalHelp')} sx={{ minHeight: 44 }}>{t('renewalRequired')}</Button>
     }
     if (invitation.status !== 'pending' || !invitation.recipient_email) return null
 
     const cooldown = resendCooldowns[invitation.id] ?? 0
     const label = cooldown > 0
-      ? `Retry in ${formatRetry(cooldown)}`
-      : invitation.last_delivery_status === 'failed' ? 'Retry Email' : 'Resend Invitation'
+      ? t('retryIn', { time: formatRetry(cooldown, t) })
+      : invitation.last_delivery_status === 'failed' ? t('retryEmail') : t('resend')
     return <Button onClick={() => { setResendError(''); setResendTarget(invitation) }} disabled={resendingId !== null || cooldown > 0} sx={{ minHeight: 44 }}>{label}</Button>
   }
 
@@ -204,23 +208,23 @@ export function StoreInvitations({ accessToken }: Props) {
         <CardContent>
           <Stack spacing={1.5}>
             <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-              <Typography sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{invitation.recipient_email || 'Open invitation'}</Typography>
-              <Chip size="small" label={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'Delivery failed' : statusLabel(invitation.status)} color={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'warning' : statusColor(invitation.status)} />
+              <Typography sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{invitation.recipient_email || t('open')}</Typography>
+              <Chip size="small" label={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? t('deliveryFailed') : t(invitation.status === 'pending' ? 'active' : invitation.status)} color={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'warning' : statusColor(invitation.status)} />
             </Stack>
-            <Typography variant="body2" color="text.secondary">Created {formatDate(invitation.created_at)}</Typography>
-            <Typography variant="body2" color="text.secondary">Expires {formatDate(invitation.expires_at)}</Typography>
+            <Typography variant="body2" color="text.secondary">{t('created')} {formatDate(invitation.created_at, i18n.resolvedLanguage)}</Typography>
+            <Typography variant="body2" color="text.secondary">{t('expires')} {formatDate(invitation.expires_at, i18n.resolvedLanguage)}</Typography>
             {resendButton(invitation)}
-            {invitation.status === 'pending' && <Button startIcon={<DeleteOutlineOutlinedIcon />} color="error" onClick={() => setRevokeTarget(invitation)} sx={{ alignSelf: 'flex-start', minHeight: 44 }}>Revoke</Button>}
+            {invitation.status === 'pending' && <Button startIcon={<DeleteOutlineOutlinedIcon />} color="error" onClick={() => setRevokeTarget(invitation)} sx={{ alignSelf: 'flex-start', minHeight: 44 }}>{t('revoke')}</Button>}
           </Stack>
         </CardContent>
       </Card>
     ) : (
       <TableRow key={invitation.id}>
-        <TableCell>{invitation.recipient_email || 'Open invitation'}</TableCell>
-        <TableCell>{formatDate(invitation.created_at)}</TableCell>
-        <TableCell>{formatDate(invitation.expires_at)}</TableCell>
-        <TableCell><Chip size="small" label={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'Delivery failed' : statusLabel(invitation.status)} color={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'warning' : statusColor(invitation.status)} /></TableCell>
-        <TableCell align="right"><Stack direction="row" sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>{resendButton(invitation)}{invitation.status === 'pending' && <IconButton aria-label={`Revoke invitation for ${invitation.recipient_email || 'Open invitation'}`} color="error" onClick={() => setRevokeTarget(invitation)}><DeleteOutlineOutlinedIcon /></IconButton>}</Stack></TableCell>
+        <TableCell>{invitation.recipient_email || t('open')}</TableCell>
+        <TableCell>{formatDate(invitation.created_at, i18n.resolvedLanguage)}</TableCell>
+        <TableCell>{formatDate(invitation.expires_at, i18n.resolvedLanguage)}</TableCell>
+        <TableCell><Chip size="small" label={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? t('deliveryFailed') : t(invitation.status === 'pending' ? 'active' : invitation.status)} color={invitation.status === 'pending' && invitation.last_delivery_status === 'failed' ? 'warning' : statusColor(invitation.status)} /></TableCell>
+        <TableCell align="right"><Stack direction="row" sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>{resendButton(invitation)}{invitation.status === 'pending' && <IconButton aria-label={t('revokeFor', { email: invitation.recipient_email || t('open') })} color="error" onClick={() => setRevokeTarget(invitation)}><DeleteOutlineOutlinedIcon /></IconButton>}</Stack></TableCell>
       </TableRow>
     )
   ))
@@ -228,66 +232,66 @@ export function StoreInvitations({ accessToken }: Props) {
   return (
     <Stack spacing={2.5}>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
-        <Box><Typography variant="h4" component="h2">Store invitations</Typography><Typography color="text.secondary">Create and manage invitations for new store owners.</Typography></Box>
-        <Button variant="contained" onClick={() => setCreateOpen(true)} sx={{ minHeight: 48, alignSelf: { xs: 'stretch', sm: 'auto' } }}>New Invitation</Button>
+        <Box><Typography variant="h4" component="h2">{t('title')}</Typography><Typography color="text.secondary">{t('description')}</Typography></Box>
+        <Button variant="contained" onClick={() => setCreateOpen(true)} sx={{ minHeight: 48, alignSelf: { xs: 'stretch', sm: 'auto' } }}>{t('new')}</Button>
       </Stack>
 
       {actionError && <Alert severity="error">{actionError}</Alert>}
       {actionMessage && <Alert severity="success" onClose={() => setActionMessage('')}>{actionMessage}</Alert>}
-      {loading ? <Stack sx={{ py: 8, alignItems: 'center' }}><CircularProgress aria-label="Loading invitations" /></Stack>
-        : loadError ? <Alert severity="error" action={<Button color="inherit" onClick={() => setAttempt((value) => value + 1)}>Retry</Button>}>Could not load invitations: {loadError}</Alert>
-          : invitations.length === 0 ? <Card><CardContent sx={{ py: 5, textAlign: 'center' }}><Typography variant="h6">No invitations yet</Typography><Typography color="text.secondary">Create an invitation to get started.</Typography></CardContent></Card>
+      {loading ? <Stack sx={{ py: 8, alignItems: 'center' }}><CircularProgress aria-label={t('loading')} /></Stack>
+        : loadError ? <Alert severity="error" action={<Button color="inherit" onClick={() => setAttempt((value) => value + 1)}>{t('retry')}</Button>}>{t('loadError')}: {loadError}</Alert>
+          : invitations.length === 0 ? <Card><CardContent sx={{ py: 5, textAlign: 'center' }}><Typography variant="h6">{t('empty')}</Typography><Typography color="text.secondary">{t('emptyHint')}</Typography></CardContent></Card>
             : mobile ? <Stack spacing={1.5}>{invitationRows(true)}</Stack>
-              : <TableContainer component={Card}><Table aria-label="Store invitations"><TableHead><TableRow><TableCell>Recipient</TableCell><TableCell>Created</TableCell><TableCell>Expires</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow></TableHead><TableBody>{invitationRows(false)}</TableBody></Table></TableContainer>}
+              : <TableContainer component={Card}><Table aria-label={t('title')}><TableHead><TableRow><TableCell>{t('recipient')}</TableCell><TableCell>{t('created')}</TableCell><TableCell>{t('expires')}</TableCell><TableCell>{t('status')}</TableCell><TableCell align="right">{t('actions')}</TableCell></TableRow></TableHead><TableBody>{invitationRows(false)}</TableBody></Table></TableContainer>}
 
       <Dialog open={createOpen} onClose={() => { if (!creating) clearCreateDialog() }} fullWidth maxWidth="sm" aria-labelledby="new-invitation-title">
         <Box component="form" noValidate onSubmit={handleCreate}>
-          <DialogTitle id="new-invitation-title">{createdLink ? 'Invitation created' : 'Create store invitation'}</DialogTitle>
+              <DialogTitle id="new-invitation-title">{createdLink ? t('createdTitle') : t('createTitle')}</DialogTitle>
           <DialogContent>
             {createdLink ? <Stack spacing={2} sx={{ pt: 1 }}>
               <Alert severity={emailDeliveryStatus === 'failed' ? 'warning' : 'success'}>
-                {emailDeliveryStatus === 'sent' && 'Invitación creada y correo enviado.'}
-                {emailDeliveryStatus === 'not_requested' && 'Invitación creada. Copia el enlace para compartirlo.'}
-                {emailDeliveryStatus === 'failed' && 'La invitación fue creada, pero no se pudo enviar el correo. Puedes copiar el enlace y compartirlo manualmente.'}
+                {emailDeliveryStatus === 'sent' && t('createdSent')}
+                {emailDeliveryStatus === 'not_requested' && t('createdOpen')}
+                {emailDeliveryStatus === 'failed' && t('createdFailed')}
               </Alert>
-              <Alert severity="info">This invitation can be used once to create one store. It expires in seven days.</Alert>
-              <TextField label="Invitation link" value={createdLink.url} fullWidth slotProps={{ htmlInput: { readOnly: true } }} />
-              <Button variant="outlined" startIcon={<ContentCopyOutlinedIcon />} onClick={() => void handleCopy()} sx={{ minHeight: 48 }}>Copy Link</Button>
-              {copyMessage && <Alert severity={copyMessage.startsWith('Invitation') ? 'success' : 'error'}>{copyMessage}</Alert>}
+              <Alert severity="info">{t('oneStore')}</Alert>
+              <TextField label={t('link')} value={createdLink.url} fullWidth slotProps={{ htmlInput: { readOnly: true } }} />
+              <Button variant="outlined" startIcon={<ContentCopyOutlinedIcon />} onClick={() => void handleCopy()} sx={{ minHeight: 48 }}>{t('copy')}</Button>
+              {copyMessage && <Alert severity={copyFailed ? 'error' : 'success'}>{copyMessage}</Alert>}
             </Stack> : <Stack spacing={2} sx={{ pt: 1 }}>
-              <Alert severity="info">One invitation creates one store and expires after seven days. Share the generated link manually.</Alert>
+              <Alert severity="info">{t('oneStore')}</Alert>
               {createError && <Alert severity="error">{createError}</Alert>}
-              <TextField label="Recipient email (optional)" type="email" value={recipientEmail} onChange={(event) => setRecipientEmail(event.target.value)} fullWidth autoComplete="email" helperText="Leave blank for an open invitation." disabled={creating} />
+              <TextField label={t('email')} type="email" value={recipientEmail} onChange={(event) => setRecipientEmail(event.target.value)} fullWidth autoComplete="email" helperText={t('emailHelp')} disabled={creating} />
             </Stack>}
           </DialogContent>
           <DialogActions sx={{ p: 2, pt: 0 }}>
-            <Button onClick={clearCreateDialog} disabled={creating} sx={{ minHeight: 44 }}>{createdLink ? 'Done' : 'Cancel'}</Button>
-            {!createdLink && <Button type="submit" variant="contained" disabled={creating} sx={{ minHeight: 44 }}>{creating ? <CircularProgress size={22} color="inherit" /> : 'Create invitation'}</Button>}
+            <Button onClick={clearCreateDialog} disabled={creating} sx={{ minHeight: 44 }}>{createdLink ? t('done') : t('cancel')}</Button>
+            {!createdLink && <Button type="submit" variant="contained" disabled={creating} sx={{ minHeight: 44 }}>{creating ? <CircularProgress size={22} color="inherit" /> : t('create')}</Button>}
           </DialogActions>
         </Box>
       </Dialog>
 
       <Dialog open={Boolean(revokeTarget)} onClose={() => revokingId === null && setRevokeTarget(null)} aria-labelledby="revoke-invitation-title">
-        <DialogTitle id="revoke-invitation-title">Revoke invitation?</DialogTitle>
-        <DialogContent><Typography>This invitation will no longer be usable.</Typography></DialogContent>
+        <DialogTitle id="revoke-invitation-title">{t('revokeQuestion')}</DialogTitle>
+        <DialogContent><Typography>{t('revokeWarning')}</Typography></DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setRevokeTarget(null)} disabled={revokingId !== null}>Cancel</Button>
+          <Button onClick={() => setRevokeTarget(null)} disabled={revokingId !== null}>{t('cancel')}</Button>
           <Button color="error" variant="contained" onClick={() => void handleRevoke()} disabled={revokingId !== null}>
-            {revokingId !== null ? <CircularProgress size={20} color="inherit" /> : 'Revoke invitation'}
+            {revokingId !== null ? <CircularProgress size={20} color="inherit" /> : t('revoke')}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={Boolean(resendTarget)} onClose={() => resendingId === null && setResendTarget(null)} aria-labelledby="resend-invitation-title">
-        <DialogTitle id="resend-invitation-title">Resend invitation?</DialogTitle>
+        <DialogTitle id="resend-invitation-title">{t('confirmResend')}</DialogTitle>
         <DialogContent>
-          <Typography>¿Deseas reenviar esta invitación a {resendTarget?.recipient_email}?</Typography>
+          <Typography>{t('confirmResendTo', { email: resendTarget?.recipient_email ?? '' })}</Typography>
           {resendError && <Alert severity="error" sx={{ mt: 2 }}>{resendError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setResendTarget(null)} disabled={resendingId !== null}>Cancel</Button>
-          <Button aria-label={resendingId !== null ? 'Sending invitation' : resendTarget && (resendCooldowns[resendTarget.id] ?? 0) > 0 ? `Reintentar en ${formatRetry(resendCooldowns[resendTarget.id])}` : 'Reenviar invitación'} variant="contained" onClick={() => void handleResend()} disabled={resendingId !== null || (resendTarget ? (resendCooldowns[resendTarget.id] ?? 0) > 0 : true)}>
-            {resendingId !== null ? <CircularProgress size={20} color="inherit" /> : resendTarget && (resendCooldowns[resendTarget.id] ?? 0) > 0 ? `Reintentar en ${formatRetry(resendCooldowns[resendTarget.id])}` : 'Reenviar invitación'}
+          <Button onClick={() => setResendTarget(null)} disabled={resendingId !== null}>{t('cancel')}</Button>
+          <Button aria-label={resendingId !== null ? t('sendingInvitation') : resendTarget && (resendCooldowns[resendTarget.id] ?? 0) > 0 ? t('retryIn', { time: formatRetry(resendCooldowns[resendTarget.id], t) }) : t('resend')} variant="contained" onClick={() => void handleResend()} disabled={resendingId !== null || (resendTarget ? (resendCooldowns[resendTarget.id] ?? 0) > 0 : true)}>
+            {resendingId !== null ? <CircularProgress size={20} color="inherit" /> : resendTarget && (resendCooldowns[resendTarget.id] ?? 0) > 0 ? t('retryIn', { time: formatRetry(resendCooldowns[resendTarget.id], t) }) : t('resend')}
           </Button>
         </DialogActions>
       </Dialog>

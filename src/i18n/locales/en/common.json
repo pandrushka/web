@@ -1,0 +1,37 @@
+{
+  "language": {
+    "label": "Language",
+    "spanish": "Español",
+    "english": "English"
+  },
+  "actions": {
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "back": "Back",
+    "edit": "Edit",
+    "remove": "Remove",
+    "confirm": "Confirm",
+    "loading": "Loading…",
+    "logOut": "Log out",
+    "copy": "Copy",
+    "search": "Search"
+  },
+  "states": {
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "archived": "Archived",
+    "active": "Active",
+    "draft": "Draft",
+    "suspended": "Suspended",
+    "comingSoon": "Coming soon",
+    "notProvided": "Not provided"
+  },
+  "errors": {
+    "generic": "The request could not be completed.",
+    "load": "Could not load the information.",
+    "requestFailed": "Request failed with status {{status}}.",
+    "sessionExpired": "Your session has expired. Sign in again to view this image."
+  }
+}

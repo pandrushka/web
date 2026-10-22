@@ -13,6 +13,8 @@ import type { ImageTokenRefresh } from '../../api/productImages'
 import type { StoreProfile } from '../../api/stores'
 import { CategoryDialog, ProductDialog } from './CatalogDialogs'
 import { ProductImage } from './ProductImage'
+import { useAppTranslation } from '../../i18n/useAppTranslation'
+import { formatNioPrice } from '../../utils/formatNioPrice'
 
 type StoreCatalogManagementProps = {
   accessToken: string
@@ -31,26 +33,24 @@ type ArchiveTarget = { kind: 'product' | 'category'; id: number; name: string }
 
 const managerRoles = ['owner', 'admin']
 
-function money(price: string) {
-  return `C$ ${price}`
+function productStatus(product: CatalogProduct, translate: (key: string) => string) {
+  if (!product.active) return <Chip size="small" label={translate('archived')} color="default" />
+  if (!product.available) return <Chip size="small" label={translate('temporarilyUnavailable')} color="warning" />
+  return <Chip size="small" label={translate('available')} color="success" />
 }
 
-function productStatus(product: CatalogProduct) {
-  if (!product.active) return <Chip size="small" label="Archived" color="default" />
-  if (!product.available) return <Chip size="small" label="Temporarily unavailable" color="warning" />
-  return <Chip size="small" label="Available" color="success" />
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'The request could not be completed.'
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
 }
 
 export function StoreCatalogManagement({ accessToken, stores, scope, platformStoreId = null, platformStore = null, initialStoreId = null, onBack, userId = 0, refreshAccessToken }: StoreCatalogManagementProps) {
+  const { t, i18n } = useAppTranslation('catalog')
   const manageableStores = useMemo(() => stores.filter((store) => managerRoles.includes(store.membership?.role ?? '')), [stores])
-  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(initialStoreId ?? null)
+  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null)
+  const effectiveSelectedStoreId = initialStoreId ?? selectedStoreId
   const store = scope === 'platform'
     ? platformStore?.id === platformStoreId ? platformStore : stores.find((item) => item.id === platformStoreId) ?? null
-    : manageableStores.find((item) => item.id === selectedStoreId) ?? manageableStores.find((item) => item.id === initialStoreId) ?? manageableStores[0] ?? null
+    : manageableStores.find((item) => item.id === effectiveSelectedStoreId) ?? manageableStores[0] ?? null
   const storeId = scope === 'platform' ? platformStoreId : store?.id ?? null
   const membershipRole = stores.find((item) => item.id === storeId)?.membership?.role
   const canManage = scope === 'member' || managerRoles.includes(membershipRole ?? '')
@@ -58,9 +58,8 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
 
   const [categories, setCategories] = useState<CatalogCategory[]>([])
   const [products, setProducts] = useState<CatalogProduct[]>([])
-  const [loading, setLoading] = useState(Boolean(storeId))
   const [loadedKey, setLoadedKey] = useState('')
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [tab, setTab] = useState<'products' | 'categories'>('products')
   const [search, setSearch] = useState('')
@@ -83,32 +82,27 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
   const [notice, setNotice] = useState<string | null>(null)
   const mutationLock = useRef(false)
 
-  useEffect(() => {
-    if (initialStoreId !== null) setSelectedStoreId(initialStoreId)
-  }, [initialStoreId])
+  const requestKey = storeId === null ? '' : `${source}:${storeId}:${loadAttempt}`
+  const currentLoadError = loadError?.key === requestKey ? loadError.message : null
+  const loading = storeId !== null && loadedKey !== requestKey && currentLoadError === null
 
   const loadCatalog = useCallback(() => {
     if (storeId === null) return undefined
     let cancelled = false
-    const requestKey = `${source}:${storeId}`
-    setLoading(true)
-    setLoadError(null)
-    setLoadedKey('')
-    setCategories([])
-    setProducts([])
+    const requestKey = `${source}:${storeId}:${loadAttempt}`
     Promise.all([fetchCategories(accessToken, storeId, source), fetchProducts(accessToken, storeId, source)])
       .then(([categoryResponse, productResponse]) => {
         if (cancelled) return
         setCategories(categoryResponse.categories)
         setProducts(productResponse.products)
         setLoadedKey(requestKey)
+        setLoadError(null)
       })
-      .catch((error: unknown) => { if (!cancelled) setLoadError(errorMessage(error)) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .catch((error: unknown) => { if (!cancelled) setLoadError({ key: requestKey, message: errorMessage(error, t('requestError')) }) })
     return () => { cancelled = true }
-  }, [accessToken, source, storeId])
+  }, [accessToken, loadAttempt, source, storeId, t])
 
-  useEffect(() => loadCatalog(), [loadCatalog, loadAttempt])
+  useEffect(() => loadCatalog(), [loadCatalog])
 
   const visibleProducts = useMemo(() => products.filter((product) => {
     if (!product.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) return false
@@ -152,22 +146,22 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
       replaceProduct(savedProduct)
 
       if (imageChanges.file || imageChanges.remove) {
-        setProductSavingLabel(imageChanges.file ? 'Uploading image…' : 'Removing image…')
+        setProductSavingLabel(imageChanges.file ? t('imageUpload') : t('imageRemove'))
         try {
           const imageResponse = imageChanges.file
             ? await uploadProductImage(accessToken, storeId, savedProduct.id, imageChanges.file)
             : await removeProductImage(accessToken, storeId, savedProduct.id)
           replaceProduct({ ...savedProduct, image: imageResponse.product.image })
         } catch (imageError) {
-          setProductImageError(errorMessage(imageError))
+          setProductImageError(errorMessage(imageError, t('requestError')))
           return
         }
       }
 
       setProductDialogOpen(false)
-      setNotice(editingProduct ? 'Product updated.' : 'Product added.')
+      setNotice(editingProduct ? t('productUpdated') : t('productAdded'))
     } catch (error) {
-      setProductError(errorMessage(error))
+      setProductError(errorMessage(error, t('requestError')))
     } finally {
       mutationLock.current = false
       setProductSaving(false)
@@ -194,9 +188,9 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
         ? current.map((category) => category.id === response.category.id ? response.category : category)
         : [...current, response.category].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name)))
       setCategoryDialogOpen(false)
-      setNotice(editingCategory ? 'Category updated.' : 'Category added.')
+      setNotice(editingCategory ? t('categoryUpdated') : t('categoryAdded'))
     } catch (error) {
-      setCategoryError(errorMessage(error))
+      setCategoryError(errorMessage(error, t('requestError')))
     } finally {
       mutationLock.current = false
       setCategorySaving(false)
@@ -210,8 +204,8 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
     try {
       const response = await updateProduct(accessToken, storeId, product.id, { available: !product.available })
       setProducts((current) => current.map((item) => item.id === product.id ? response.product : item))
-      setNotice(response.product.available ? 'Product marked available.' : 'Product marked temporarily unavailable.')
-    } catch (error) { setActionError(errorMessage(error)) }
+      setNotice(response.product.available ? t('productAvailable') : t('productUnavailable'))
+    } catch (error) { setActionError(errorMessage(error, t('requestError'))) }
     finally { mutationLock.current = false }
   }
 
@@ -222,8 +216,8 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
     try {
       const response = await updateProduct(accessToken, storeId, product.id, { active: true })
       setProducts((current) => current.map((item) => item.id === product.id ? response.product : item))
-      setNotice('Product reactivated.')
-    } catch (error) { setActionError(errorMessage(error)) }
+      setNotice(t('productReactivated'))
+    } catch (error) { setActionError(errorMessage(error, t('requestError'))) }
     finally { mutationLock.current = false }
   }
 
@@ -234,8 +228,8 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
     try {
       const response = await updateCategory(accessToken, storeId, category.id, { active: !category.active })
       setCategories((current) => current.map((item) => item.id === category.id ? response.category : item))
-      setNotice(response.category.active ? 'Category reactivated.' : 'Category archived.')
-    } catch (error) { setActionError(errorMessage(error)) }
+      setNotice(response.category.active ? t('categoryReactivated') : t('categoryArchived'))
+    } catch (error) { setActionError(errorMessage(error, t('requestError'))) }
     finally { mutationLock.current = false }
   }
 
@@ -252,77 +246,77 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
         const response = await archiveCategory(accessToken, storeId, archiveTarget.id)
         setCategories((current) => current.map((item) => item.id === archiveTarget.id ? response.category : item))
       }
-      setNotice(`${archiveTarget.kind === 'product' ? 'Product' : 'Category'} archived.`)
+      setNotice(t(archiveTarget.kind === 'product' ? 'productArchived' : 'categoryArchived'))
       setArchiveTarget(null)
-    } catch (error) { setActionError(errorMessage(error)) }
+    } catch (error) { setActionError(errorMessage(error, t('requestError'))) }
     finally { mutationLock.current = false; setArchiveSaving(false) }
   }
 
   const chooseStore = scope === 'member' && manageableStores.length > 1 ? (
     <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 260 } }}>
-      <InputLabel id="catalog-store-label">Store</InputLabel>
-      <Select labelId="catalog-store-label" label="Store" value={store?.id ?? ''} onChange={(event) => setSelectedStoreId(Number(event.target.value))}>
+      <InputLabel id="catalog-store-label">{t('store')}</InputLabel>
+      <Select labelId="catalog-store-label" label={t('store')} value={store?.id ?? ''} onChange={(event) => setSelectedStoreId(Number(event.target.value))}>
         {manageableStores.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
       </Select>
     </FormControl>
   ) : null
 
-  if (scope === 'member' && manageableStores.length === 0) return <Alert severity="info">No store with product management access is available for this account.</Alert>
-  if (scope === 'platform' && !storeId) return <Alert severity="info">Select a store from All Stores to view its catalog.</Alert>
+  if (scope === 'member' && manageableStores.length === 0) return <Alert severity="info">{t('noManagedStore')}</Alert>
+  if (scope === 'platform' && !storeId) return <Alert severity="info">{t('selectStore')}</Alert>
 
   return (
     <Stack spacing={2.5}>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
         <Box>
-          {scope === 'platform' && onBack && <Button onClick={onBack} sx={{ mb: 1, px: 0 }}>Back to store details</Button>}
-          <Typography variant="h4" component="h2">Products & categories</Typography>
-          <Typography color="text.secondary">{store?.name ?? 'Selected store'}{store ? ` · ${store.city}` : ''}{!canManage && ' · Read-only platform view'}</Typography>
+          {scope === 'platform' && onBack && <Button onClick={onBack} sx={{ mb: 1, px: 0 }}>{t('backToStore')}</Button>}
+          <Typography variant="h4" component="h2">{t('title')}</Typography>
+          <Typography color="text.secondary">{store?.name ?? t('selectedStore')}{store ? ` · ${store.city}` : ''}{!canManage && ` · ${t('readOnly')}`}</Typography>
         </Box>
         {chooseStore}
       </Stack>
 
       {actionError && <Alert severity="error" onClose={() => setActionError(null)}>{actionError}</Alert>}
       {notice && <Alert severity="success" onClose={() => setNotice(null)}>{notice}</Alert>}
-      {loadError ? (
-        <Alert severity="error" action={<Button color="inherit" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry</Button>}>Could not load this store's catalog: {loadError}</Alert>
-      ) : loading || loadedKey !== `${source}:${storeId}` ? (
-        <Stack sx={{ py: 8, alignItems: 'center' }}><CircularProgress aria-label="Loading catalog" /></Stack>
+      {currentLoadError ? (
+        <Alert severity="error" action={<Button color="inherit" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>{t('retry')}</Button>}>{t('loadError')}: {currentLoadError}</Alert>
+      ) : loading || loadedKey !== requestKey ? (
+        <Stack sx={{ py: 8, alignItems: 'center' }}><CircularProgress aria-label={t('loading')} /></Stack>
       ) : (
         <Card>
           <Box sx={{ borderBottom: 1, borderColor: 'divider', px: { xs: 1, sm: 2 } }}>
-            <Tabs value={tab} onChange={(_, value: 'products' | 'categories') => setTab(value)} aria-label="Catalog sections" variant="scrollable" allowScrollButtonsMobile>
-              <Tab value="products" label={`Products (${products.length})`} />
-              <Tab value="categories" label={`Categories (${categories.length})`} />
+            <Tabs value={tab} onChange={(_, value: 'products' | 'categories') => setTab(value)} aria-label={t('sections')} variant="scrollable" allowScrollButtonsMobile>
+              <Tab value="products" label={`${t('products')} (${products.length})`} />
+              <Tab value="categories" label={`${t('categories')} (${categories.length})`} />
             </Tabs>
           </Box>
           <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
             {tab === 'products' ? (
               <Stack spacing={2.5}>
                 <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ alignItems: { md: 'center' } }}>
-                  <TextField value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products" slotProps={{ htmlInput: { 'aria-label': 'Search products' }, input: { startAdornment: <SearchOutlinedIcon sx={{ mr: 1, color: 'text.secondary' }} /> } }} sx={{ flex: 1 }} />
+                  <TextField value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} slotProps={{ htmlInput: { 'aria-label': t('search') }, input: { startAdornment: <SearchOutlinedIcon sx={{ mr: 1, color: 'text.secondary' }} /> } }} sx={{ flex: 1 }} />
                   <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 190 } }}>
-                    <InputLabel id="product-category-filter-label">Category</InputLabel>
-                    <Select labelId="product-category-filter-label" label="Category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                      <MenuItem value="all">All categories</MenuItem>
-                      {categories.map((category) => <MenuItem key={category.id} value={category.id.toString()}>{category.name}{category.active ? '' : ' (archived)'}</MenuItem>)}
+                    <InputLabel id="product-category-filter-label">{t('category')}</InputLabel>
+                    <Select labelId="product-category-filter-label" label={t('category')} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                      <MenuItem value="all">{t('allCategories')}</MenuItem>
+                      {categories.map((category) => <MenuItem key={category.id} value={category.id.toString()}>{category.name}{category.active ? '' : t('archivedMarker')}</MenuItem>)}
                     </Select>
                   </FormControl>
                   <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 140 } }}>
-                    <InputLabel id="listing-filter-label">Listing</InputLabel>
-                    <Select labelId="listing-filter-label" label="Listing" value={listingFilter} onChange={(event) => setListingFilter(event.target.value)}>
-                      <MenuItem value="all">All listings</MenuItem><MenuItem value="active">Active</MenuItem><MenuItem value="archived">Archived</MenuItem>
+                    <InputLabel id="listing-filter-label">{t('listing')}</InputLabel>
+                    <Select labelId="listing-filter-label" label={t('listing')} value={listingFilter} onChange={(event) => setListingFilter(event.target.value)}>
+                      <MenuItem value="all">{t('allListings')}</MenuItem><MenuItem value="active">{t('active')}</MenuItem><MenuItem value="archived">{t('archived')}</MenuItem>
                     </Select>
                   </FormControl>
                   <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 170 } }}>
-                    <InputLabel id="availability-filter-label">Availability</InputLabel>
-                    <Select labelId="availability-filter-label" label="Availability" value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value)}>
-                      <MenuItem value="all">Any availability</MenuItem><MenuItem value="available">Available</MenuItem><MenuItem value="unavailable">Temporarily unavailable</MenuItem>
+                    <InputLabel id="availability-filter-label">{t('availability')}</InputLabel>
+                    <Select labelId="availability-filter-label" label={t('availability')} value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value)}>
+                      <MenuItem value="all">{t('anyAvailability')}</MenuItem><MenuItem value="available">{t('available')}</MenuItem><MenuItem value="unavailable">{t('temporarilyUnavailable')}</MenuItem>
                     </Select>
                   </FormControl>
-                  {canManage && <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={() => openProduct(null)} sx={{ flexShrink: 0 }}>Add product</Button>}
+                  {canManage && <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={() => openProduct(null)} sx={{ flexShrink: 0 }}>{t('addProduct')}</Button>}
                 </Stack>
                 {visibleProducts.length === 0 ? (
-                  <Box sx={{ py: 5, textAlign: 'center' }}><Typography variant="h6">{products.length === 0 ? 'No products yet' : 'No matching products'}</Typography><Typography color="text.secondary">{products.length === 0 ? (canManage ? 'Add everyday items to start building this store catalog.' : 'Products added to this store will appear here.') : 'Try changing your search or filters.'}</Typography></Box>
+                  <Box sx={{ py: 5, textAlign: 'center' }}><Typography variant="h6">{products.length === 0 ? t('emptyProducts') : t('noMatchingProducts')}</Typography><Typography color="text.secondary">{products.length === 0 ? (canManage ? t('emptyProductsManager') : t('emptyProductsReadonly')) : t('adjustFilters')}</Typography></Box>
                 ) : (
                   <Grid container spacing={1.5}>
                     {visibleProducts.map((product) => (
@@ -334,18 +328,18 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
                                 <ProductImage path={product.image?.present ? product.image.thumbnail_path : null} accessToken={accessToken} cacheScope={`user-${userId}`} alt={`${product.name} image`} refreshAccessToken={refreshAccessToken} size={56} />
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
                                   <Typography variant="h6" sx={{ overflowWrap: 'anywhere' }}>{product.name}</Typography>
-                                  <Typography variant="body2" color="text.secondary">{product.category?.name ?? 'Uncategorized'} · {product.unit}</Typography>
+                                  <Typography variant="body2" color="text.secondary">{product.category?.name ?? t('uncategorized')} · {t(`units.${product.unit}`)}</Typography>
                                 </Box>
-                                <Typography variant="h6" sx={{ whiteSpace: 'nowrap', color: 'primary.dark' }}>{money(product.price)}</Typography>
+                                <Typography variant="h6" sx={{ whiteSpace: 'nowrap', color: 'primary.dark' }}>{formatNioPrice(product.price, i18n.resolvedLanguage)}</Typography>
                               </Stack>
                               {product.description && <Typography variant="body2" color="text.secondary">{product.description}</Typography>}
                               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-                                {productStatus(product)}
+                                {productStatus(product, (key) => t(key))}
                                 {canManage && <Box sx={{ flex: 1 }} />}
-                                {canManage && product.active && <Button size="small" onClick={() => void setProductAvailability(product)}>{product.available ? 'Mark unavailable' : 'Mark available'}</Button>}
-                                {canManage && !product.active && <Button size="small" aria-label={`Reactivate ${product.name}`} startIcon={<ReplayOutlinedIcon />} onClick={() => void reactivateProduct(product)}>Reactivate</Button>}
-                                {canManage && <Button size="small" aria-label={`Edit ${product.name}`} startIcon={<EditOutlinedIcon />} onClick={() => openProduct(product)}>Edit</Button>}
-                                {canManage && product.active && <Button size="small" color="error" aria-label={`Archive ${product.name}`} startIcon={<ArchiveOutlinedIcon />} onClick={() => setArchiveTarget({ kind: 'product', id: product.id, name: product.name })}>Archive</Button>}
+                                {canManage && product.active && <Button size="small" onClick={() => void setProductAvailability(product)}>{product.available ? t('markUnavailable') : t('markAvailable')}</Button>}
+                                {canManage && !product.active && <Button size="small" aria-label={t('reactivateNamed', { name: product.name })} startIcon={<ReplayOutlinedIcon />} onClick={() => void reactivateProduct(product)}>{t('reactivate')}</Button>}
+                                {canManage && <Button size="small" aria-label={t('editNamed', { name: product.name })} startIcon={<EditOutlinedIcon />} onClick={() => openProduct(product)}>{t('edit')}</Button>}
+                                {canManage && product.active && <Button size="small" color="error" aria-label={t('archiveNamed', { name: product.name })} startIcon={<ArchiveOutlinedIcon />} onClick={() => setArchiveTarget({ kind: 'product', id: product.id, name: product.name })}>{t('archive')}</Button>}
                               </Stack>
                             </Stack>
                           </CardContent>
@@ -358,20 +352,20 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
             ) : (
               <Stack spacing={2}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box><Typography variant="h6">Store categories</Typography><Typography variant="body2" color="text.secondary">Archiving a category does not change products assigned to it.</Typography></Box>
-                  {canManage && <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={() => openCategory(null)}>Add category</Button>}
+                  <Box><Typography variant="h6">{t('storeCategories')}</Typography><Typography variant="body2" color="text.secondary">{t('categoryArchiveExplanation')}</Typography></Box>
+                  {canManage && <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={() => openCategory(null)}>{t('addCategory')}</Button>}
                 </Stack>
-                {categories.length === 0 ? <Box sx={{ py: 5, textAlign: 'center' }}><Typography variant="h6">No categories yet</Typography><Typography color="text.secondary">Create categories to organize products.</Typography></Box> : (
+                {categories.length === 0 ? <Box sx={{ py: 5, textAlign: 'center' }}><Typography variant="h6">{t('emptyCategories')}</Typography><Typography color="text.secondary">{t('createCategoriesHint')}</Typography></Box> : (
                   <Stack spacing={1}>
                     {categories.map((category) => (
                       <Card key={category.id} variant="outlined" sx={{ boxShadow: 'none' }}>
                         <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
                             <Typography sx={{ flex: 1, fontWeight: 600 }}>{category.name}</Typography>
-                            <Chip size="small" label={category.active ? 'Active' : 'Archived'} color={category.active ? 'success' : 'default'} />
-                            {canManage && <Button size="small" aria-label={`Edit ${category.name}`} startIcon={<EditOutlinedIcon />} onClick={() => openCategory(category)}>Rename</Button>}
-                            {canManage && category.active && <Button size="small" color="error" aria-label={`Archive ${category.name}`} onClick={() => setArchiveTarget({ kind: 'category', id: category.id, name: category.name })}>Archive</Button>}
-                            {canManage && !category.active && <Button size="small" aria-label={`Reactivate ${category.name}`} onClick={() => void toggleCategory(category)}>Reactivate</Button>}
+                            <Chip size="small" label={category.active ? t('active') : t('archived')} color={category.active ? 'success' : 'default'} />
+                            {canManage && <Button size="small" aria-label={t('editNamed', { name: category.name })} startIcon={<EditOutlinedIcon />} onClick={() => openCategory(category)}>{t('rename')}</Button>}
+                            {canManage && category.active && <Button size="small" color="error" aria-label={t('archiveNamed', { name: category.name })} onClick={() => setArchiveTarget({ kind: 'category', id: category.id, name: category.name })}>{t('archive')}</Button>}
+                            {canManage && !category.active && <Button size="small" aria-label={t('reactivateNamed', { name: category.name })} onClick={() => void toggleCategory(category)}>{t('reactivate')}</Button>}
                           </Stack>
                         </CardContent>
                       </Card>
@@ -387,9 +381,9 @@ export function StoreCatalogManagement({ accessToken, stores, scope, platformSto
       <ProductDialog open={productDialogOpen} product={editingProduct} categories={categories} saving={productSaving} savingLabel={productSavingLabel} error={productError} imageError={productImageError} accessToken={accessToken} cacheScope={`user-${userId}`} refreshAccessToken={refreshAccessToken} onClose={() => setProductDialogOpen(false)} onSave={(changes, imageChanges) => void saveProduct(changes, imageChanges)} />
       <CategoryDialog open={categoryDialogOpen} category={editingCategory} saving={categorySaving} error={categoryError} onClose={() => setCategoryDialogOpen(false)} onSave={(name) => void saveCategory(name)} />
       <Dialog open={Boolean(archiveTarget)} onClose={() => { if (!archiveSaving) setArchiveTarget(null) }} aria-labelledby="archive-dialog-title">
-        <DialogTitle id="archive-dialog-title">Archive {archiveTarget?.kind}?</DialogTitle>
-        <DialogContent><Typography>{archiveTarget?.name} will remain in management lists and can be reactivated later.</Typography></DialogContent>
-        <DialogActions><Button onClick={() => setArchiveTarget(null)} disabled={archiveSaving}>Cancel</Button><Button color="error" variant="contained" onClick={() => void confirmArchive()} disabled={archiveSaving}>{archiveSaving ? 'Archiving…' : 'Archive'}</Button></DialogActions>
+        <DialogTitle id="archive-dialog-title">{t(archiveTarget?.kind === 'product' ? 'archiveProduct' : 'archiveCategory')}</DialogTitle>
+        <DialogContent><Typography>{t('archiveKeepAvailable', { name: archiveTarget?.name ?? '' })}</Typography></DialogContent>
+        <DialogActions><Button onClick={() => setArchiveTarget(null)} disabled={archiveSaving}>{t('cancel')}</Button><Button color="error" variant="contained" onClick={() => void confirmArchive()} disabled={archiveSaving}>{archiveSaving ? t('archiving') : t('archive')}</Button></DialogActions>
       </Dialog>
     </Stack>
   )

@@ -3,6 +3,7 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined'
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from '@mui/material'
 import type { User } from '../types/auth'
 import type { AppView } from '../types/navigation'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
 type DashboardPanelProps = {
   user: User
@@ -12,17 +13,18 @@ type DashboardPanelProps = {
 }
 
 export function DashboardPanel({ user, questionCount, canEditQuestions, onNavigate }: DashboardPanelProps) {
+  const { t } = useAppTranslation('legacy')
   return (
     <Stack spacing={3}>
       <Stack spacing={1}>
         <Typography color="secondary" sx={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.08em' }}>
-          DASHBOARD
+          {t('dashboardEyebrow')}
         </Typography>
         <Typography variant="h1" sx={{ fontSize: { xs: 36, md: 52 }, lineHeight: 1 }}>
-          Welcome back.
+          {t('welcomeBack')}
         </Typography>
         <Typography color="text.secondary">
-          Signed in as {user.email}. Use the menu to move through the app.
+          {t('signedInAs', { email: user.email })}
         </Typography>
       </Stack>
 
@@ -40,14 +42,14 @@ export function DashboardPanel({ user, questionCount, canEditQuestions, onNaviga
                 <QuizOutlinedIcon color="secondary" />
                 <Stack spacing={0.5}>
                   <Typography variant="h6">
-                    Questionnaire
+                    {t('title')}
                   </Typography>
                   <Typography color="text.secondary">
-                    {questionCount} active {questionCount === 1 ? 'question is' : 'questions are'} ready.
+                    {t('questionCount', { count: questionCount })}
                   </Typography>
                 </Stack>
                 <Button variant="contained" onClick={() => onNavigate('questionnaire')}>
-                  Open questionnaire
+                  {t('openQuestionnaire')}
                 </Button>
               </Stack>
             </CardContent>
@@ -62,15 +64,15 @@ export function DashboardPanel({ user, questionCount, canEditQuestions, onNaviga
                   <AdminPanelSettingsOutlinedIcon color="secondary" />
                   <Stack spacing={0.5}>
                     <Typography variant="h6">
-                      Super admin tools
+                      {t('adminTools')}
                     </Typography>
                     <Typography color="text.secondary">
-                      Add questions and turn prompts on or off for sign up.
+                      {t('adminToolsDescription')}
                     </Typography>
                   </Stack>
-                  <Chip label="Super admin only" color="secondary" variant="outlined" sx={{ alignSelf: 'flex-start' }} />
+                  <Chip label={t('superAdminOnly')} color="secondary" variant="outlined" sx={{ alignSelf: 'flex-start' }} />
                   <Button variant="outlined" onClick={() => onNavigate('edit_questionnaire')}>
-                    Edit questionnaire
+                    {t('editQuestionnaire')}
                   </Button>
                 </Stack>
               </CardContent>

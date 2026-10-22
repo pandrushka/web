@@ -1,5 +1,7 @@
 import { apiBaseUrl } from './client'
 import { BoundedPromiseCache } from './boundedPromiseCache'
+import { getApiLanguage } from '../i18n/apiLanguage'
+import i18n from '../i18n'
 import type { StorefrontCategory, StorefrontProduct, StorefrontStore } from '../features/storefront/types'
 
 export type PublicProductsPage = {
@@ -20,10 +22,10 @@ export class PublicStorefrontApiError extends Error {
 const publicImageBlobCache = new BoundedPromiseCache<Blob>(48, 60_000)
 
 async function requestPublicJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`)
+  const response = await fetch(`${apiBaseUrl}${path}`, { headers: { 'Accept-Language': getApiLanguage() } })
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({})) as { error?: string; errors?: string[] }
-    throw new PublicStorefrontApiError(errorBody.error ?? errorBody.errors?.join(', ') ?? `Request failed with ${response.status}`, response.status)
+    throw new PublicStorefrontApiError(errorBody.error ?? errorBody.errors?.join(', ') ?? i18n.t('errors.requestFailed', { ns: 'common', status: response.status }), response.status)
   }
   return response.json() as Promise<T>
 }
@@ -47,10 +49,10 @@ export function fetchPublicProducts(slug: string, page = 1, perPage = 24) {
 
 export async function fetchPublicProductImage(path: string) {
   return publicImageBlobCache.getOrLoad(`${apiBaseUrl}:${path}`, async () => {
-    const response = await fetch(`${apiBaseUrl}${path}`)
+    const response = await fetch(`${apiBaseUrl}${path}`, { headers: { 'Accept-Language': getApiLanguage() } })
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({})) as { error?: string; errors?: string[] }
-      throw new PublicStorefrontApiError(errorBody.error ?? errorBody.errors?.join(', ') ?? `Image request failed with ${response.status}`, response.status)
+      throw new PublicStorefrontApiError(errorBody.error ?? errorBody.errors?.join(', ') ?? i18n.t('errors.requestFailed', { ns: 'common', status: response.status }), response.status)
     }
     return response.blob()
   })

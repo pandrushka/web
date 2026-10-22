@@ -3,6 +3,7 @@ import { Box, Skeleton } from '@mui/material'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import { fetchProductImage, onProductImageInvalidated, type ImageTokenRefresh } from '../../api/productImages'
 import { useNearViewport } from '../../hooks/useNearViewport'
+import { useAppTranslation } from '../../i18n/useAppTranslation'
 
 type Props = {
   path: string | null | undefined
@@ -15,7 +16,8 @@ type Props = {
 }
 
 export function ProductImage({ path, accessToken, cacheScope, alt, refreshAccessToken, size = 72, rounded = true }: Props) {
-  const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(Boolean(path))
+  const { t } = useAppTranslation('catalog')
+  const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(Boolean(path), '240px', path ?? '')
   const [cacheRevision, setCacheRevision] = useState(0)
   const requestKey = `${cacheScope}:${path ?? ''}:${accessToken}:${cacheRevision}`
   const [imageState, setImageState] = useState<{ key: string; src: string | null; failed: boolean; loading: boolean }>({ key: '', src: null, failed: false, loading: false })
@@ -25,16 +27,10 @@ export function ProductImage({ path, accessToken, cacheScope, alt, refreshAccess
   }), [cacheScope, path])
 
   useEffect(() => {
-    if (!path) {
-      setImageState({ key: requestKey, src: null, failed: false, loading: false })
-      return undefined
-    }
-
-    if (!isNearViewport) return undefined
+    if (!path || !isNearViewport) return undefined
 
     let cancelled = false
     let objectUrl: string | null = null
-    setImageState({ key: requestKey, src: null, failed: false, loading: true })
     void fetchProductImage(path, accessToken, cacheScope, refreshAccessToken).then((blob) => {
       objectUrl = URL.createObjectURL(blob)
       if (!cancelled) setImageState({ key: requestKey, src: objectUrl, failed: false, loading: false })
@@ -59,9 +55,9 @@ export function ProductImage({ path, accessToken, cacheScope, alt, refreshAccess
 
   const isCurrent = imageState.key === requestKey
   const content = path && (!isNearViewport || !isCurrent || imageState.loading)
-    ? <Skeleton variant="rounded" aria-label={`Loading ${alt}`} sx={{ width: '100%', height: '100%' }} />
+    ? <Skeleton variant="rounded" aria-label={t('imageLoading', { name: alt })} sx={{ width: '100%', height: '100%' }} />
     : !isCurrent || !imageState.src || imageState.failed
-      ? <Box aria-label={`${alt} placeholder`} role="img" sx={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', bgcolor: 'primary.light', color: 'primary.dark' }}><Inventory2OutlinedIcon /></Box>
+      ? <Box aria-label={t('imagePlaceholder', { name: alt })} role="img" sx={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', bgcolor: 'primary.light', color: 'primary.dark' }}><Inventory2OutlinedIcon /></Box>
       : <Box component="img" src={imageState.src} alt={alt} loading="lazy" sx={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover', bgcolor: 'background.default' }} />
   return <Box ref={containerRef} sx={imageFrame}>{content}</Box>
 }

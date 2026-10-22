@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
+import i18n from '../i18n'
+import { beforeEach } from 'vitest'
 
 function createStorage() {
   const store = new Map<string, string>()
@@ -28,6 +30,10 @@ function createStorage() {
 }
 
 const storage = createStorage()
+
+beforeEach(async () => {
+  await i18n.changeLanguage('en')
+})
 
 Object.defineProperty(window, 'localStorage', {
   configurable: true,

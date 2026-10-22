@@ -1,6 +1,7 @@
 import { Button, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material'
 import { QuestionCard } from './QuestionCard'
 import type { AnswerValue, Question } from '../types/onboarding'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
 type QuestionnairePanelProps = {
   questions: Question[]
@@ -21,16 +22,17 @@ export function QuestionnairePanel({
   onAnswerChange,
   onSubmitAnswers,
 }: QuestionnairePanelProps) {
+  const { t } = useAppTranslation('legacy')
   return (
     <Card elevation={0} sx={{ width: '100%', maxWidth: 860, border: '1px solid', borderColor: 'divider' }}>
       <CardContent sx={{ p: { xs: 3, md: 4 } }}>
         <Stack spacing={3}>
           <Stack spacing={1}>
             <Typography color="secondary" sx={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.08em' }}>
-              CREATE ACCOUNT QUESTIONNAIRE
+              {t('questionnaire.eyebrow')}
             </Typography>
             <Typography variant="h2" sx={{ fontSize: { xs: 28, md: 38 }, lineHeight: 1.05 }}>
-              Answer the questions we are currently asking.
+              {t('questionnaire.heading')}
             </Typography>
           </Stack>
 
@@ -49,7 +51,7 @@ export function QuestionnairePanel({
                 />
               ))}
               <Button variant="contained" size="large" disabled={!canSubmitAnswers || submitLoading} onClick={onSubmitAnswers}>
-                {submitLoading ? <CircularProgress size={22} color="inherit" /> : 'Save answers'}
+                {submitLoading ? <CircularProgress size={22} color="inherit" /> : t('save')}
               </Button>
             </Stack>
           )}

@@ -1,32 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 
-export function useNearViewport<T extends Element>(enabled: boolean, rootMargin = '240px') {
+export function useNearViewport<T extends Element>(enabled: boolean, rootMargin = '240px', observationKey = '') {
   const elementRef = useRef<T>(null)
-  const [isNearViewport, setIsNearViewport] = useState(false)
+  const activationKey = `${enabled}:${observationKey}`
+  const [intersection, setIntersection] = useState(() => ({ key: activationKey, reached: typeof IntersectionObserver === 'undefined' }))
+  const isNearViewport = enabled && (typeof IntersectionObserver === 'undefined' || (intersection.key === activationKey && intersection.reached))
 
   useEffect(() => {
-    if (!enabled) {
-      setIsNearViewport(false)
-      return undefined
-    }
-    if (isNearViewport) return undefined
+    if (!enabled || isNearViewport) return undefined
 
     const element = elementRef.current
     if (!element) return undefined
-    if (typeof IntersectionObserver === 'undefined') {
-      setIsNearViewport(true)
-      return undefined
-    }
+    if (typeof IntersectionObserver === 'undefined') return undefined
 
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
-        setIsNearViewport(true)
+        setIntersection({ key: activationKey, reached: true })
         observer.disconnect()
       }
     }, { rootMargin })
     observer.observe(element)
     return () => observer.disconnect()
-  }, [enabled, isNearViewport, rootMargin])
+  }, [activationKey, enabled, isNearViewport, rootMargin])
 
   return [elementRef, isNearViewport] as const
 }

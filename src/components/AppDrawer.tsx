@@ -5,6 +5,7 @@ import { Drawer, List, ListItemButton, ListItemIcon, ListItemText, Stack, Typogr
 import type { ReactNode } from 'react'
 import type { AppView } from '../types/navigation'
 import { BrandHeader } from './BrandHeader'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
 type AppDrawerProps = {
   open: boolean
@@ -15,13 +16,14 @@ type AppDrawerProps = {
 }
 
 export function AppDrawer({ open, activeView, canEditQuestions, onClose, onNavigate }: AppDrawerProps) {
+  const { t } = useAppTranslation('legacy')
   const items: Array<{ label: string; view: AppView; icon: ReactNode }> = [
-    { label: 'Dashboard', view: 'dashboard', icon: <DashboardOutlinedIcon /> },
-    { label: 'Questionnaire', view: 'questionnaire', icon: <QuizOutlinedIcon /> },
+    { label: t('nav.dashboard'), view: 'dashboard', icon: <DashboardOutlinedIcon /> },
+    { label: t('nav.questionnaire'), view: 'questionnaire', icon: <QuizOutlinedIcon /> },
   ]
 
   if (canEditQuestions) {
-    items.push({ label: 'Edit questionnaire', view: 'edit_questionnaire', icon: <EditNoteOutlinedIcon /> })
+    items.push({ label: t('nav.editQuestionnaire'), view: 'edit_questionnaire', icon: <EditNoteOutlinedIcon /> })
   }
 
   return (
@@ -29,7 +31,7 @@ export function AppDrawer({ open, activeView, canEditQuestions, onClose, onNavig
       <Stack spacing={2} sx={{ width: 292, p: 2.5 }}>
         <BrandHeader />
         <Typography variant="body2" color="text.secondary">
-          Go to your dashboard, answer the current questionnaire, or manage live questions.
+          {t('nav.help')}
         </Typography>
         <List sx={{ display: 'grid', gap: 0.5 }}>
           {items.map((item) => (

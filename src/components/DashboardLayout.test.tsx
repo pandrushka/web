@@ -17,6 +17,16 @@ describe('DashboardLayout', () => {
     }
   })
 
+  it('switches authenticated dashboard labels immediately between English and Spanish', async () => {
+    const user = userEvent.setup()
+    render(<DashboardLayout email="admin@example.com" role="platform_admin" context="platform" storeRole={null} canSwitchContext={false} isPlatformAdmin activeSection="dashboard" onContextChange={vi.fn()} onNavigate={vi.fn()} onLogout={vi.fn()}><div>Page</div></DashboardLayout>)
+    expect(screen.getByRole('heading', { name: 'Super Admin Dashboard' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Español' }))
+    expect(await screen.findByRole('heading', { name: 'Panel de Super Admin' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'English' }))
+    expect(await screen.findByRole('heading', { name: 'Super Admin Dashboard' })).toBeInTheDocument()
+  })
+
   it('enables invitation navigation only in platform context', async () => {
     const user = userEvent.setup()
     const onNavigate = vi.fn()
