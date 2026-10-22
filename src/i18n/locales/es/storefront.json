@@ -30,5 +30,7 @@
   "imageLoading": "Cargando {{name}}",
   "imagePlaceholder": "Imagen de {{name}}",
   "catalogLoadError": "No se pudo cargar el catálogo de esta tienda.",
-  "loadMoreError": "No se pudieron cargar más productos."
+  "loadMoreError": "No se pudieron cargar más productos.",
+  "backToStore": "Volver a la tienda",
+  "productNotFoundTitle": "Producto no encontrado"
 }

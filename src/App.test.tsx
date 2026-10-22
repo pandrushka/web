@@ -37,9 +37,11 @@ const catalogApi = vi.hoisted(() => ({
 }))
 
 const publicStorefrontApi = vi.hoisted(() => ({
+  fetchPublicStores: vi.fn(),
   fetchPublicStore: vi.fn(),
   fetchPublicCategories: vi.fn(),
   fetchPublicProducts: vi.fn(),
+  fetchPublicProduct: vi.fn(),
   fetchPublicProductImage: vi.fn(),
 }))
 
@@ -97,8 +99,10 @@ beforeEach(() => {
   catalogApi.updateProduct.mockReset()
   catalogApi.archiveProduct.mockReset()
   publicStorefrontApi.fetchPublicStore.mockReset()
+  publicStorefrontApi.fetchPublicStores.mockReset().mockResolvedValue({ stores: [], pagination: { page: 1, per_page: 24, total_count: 0, total_pages: 0 } })
   publicStorefrontApi.fetchPublicCategories.mockReset().mockResolvedValue({ categories: [] })
   publicStorefrontApi.fetchPublicProducts.mockReset().mockResolvedValue({ products: [], pagination: { page: 1, per_page: 24, total_count: 0, total_pages: 0 } })
+  publicStorefrontApi.fetchPublicProduct.mockReset()
   publicStorefrontApi.fetchPublicProductImage.mockReset()
   window.history.replaceState({}, '', '/')
 })
@@ -112,7 +116,7 @@ describe('App auth shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Store not found' })).toBeInTheDocument()
     expect(screen.getByText(/this store isn’t available/i)).toBeInTheDocument()
-    expect(publicStorefrontApi.fetchPublicStore).toHaveBeenCalledWith('draft-market')
+    expect(publicStorefrontApi.fetchPublicStore).toHaveBeenCalledWith('draft-market', expect.any(AbortSignal))
     expect(publicStorefrontApi.fetchPublicCategories).not.toHaveBeenCalled()
     expect(publicStorefrontApi.fetchPublicProducts).not.toHaveBeenCalled()
     expect(authApi.refreshAuth).not.toHaveBeenCalled()
@@ -136,8 +140,8 @@ describe('App auth shell', () => {
     expect(screen.getByText('No products are available yet.')).toBeInTheDocument()
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
     expect(screen.queryByText(/preview — not published/i)).not.toBeInTheDocument()
-    expect(publicStorefrontApi.fetchPublicCategories).toHaveBeenCalledWith('pulperia-estrada')
-    expect(publicStorefrontApi.fetchPublicProducts).toHaveBeenCalledWith('pulperia-estrada')
+    expect(publicStorefrontApi.fetchPublicCategories).toHaveBeenCalledWith('pulperia-estrada', expect.any(AbortSignal))
+    expect(publicStorefrontApi.fetchPublicProducts).toHaveBeenCalledWith('pulperia-estrada', 1, 24, { q: '', categoryId: '' }, expect.any(AbortSignal))
     expect(authApi.refreshAuth).not.toHaveBeenCalled()
     expect(storeApi.fetchMyStores).not.toHaveBeenCalled()
     act(() => window.dispatchEvent(new StorageEvent('storage', {
@@ -145,6 +149,24 @@ describe('App auth shell', () => {
       newValue: JSON.stringify(userAuthResponse),
     })))
     expect(storeApi.fetchMyStores).not.toHaveBeenCalled()
+  })
+
+  it('resolves public directory and product detail routes before auth and store slug handling', async () => {
+    publicStorefrontApi.fetchPublicStores.mockResolvedValueOnce({ stores: [{ name: 'Tienda María', slug: 'tienda-maria', logo_initial: 'T', description: null, city: 'Masaya' }], pagination: { page: 1, per_page: 24, total_count: 1, total_pages: 1 } })
+    window.history.replaceState({}, '', '/stores')
+    const directory = render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Discover neighborhood stores' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Visit Tienda María' })).toHaveAttribute('href', '/tienda-maria')
+    expect(authApi.refreshAuth).not.toHaveBeenCalled()
+    directory.unmount()
+
+    publicStorefrontApi.fetchPublicStore.mockResolvedValue({ store: { name: 'Tienda María', slug: 'tienda-maria', logo_initial: 'T', description: null, city: 'Masaya' } })
+    publicStorefrontApi.fetchPublicProduct.mockResolvedValue({ product: { id: 9, name: 'Arroz', description: null, price: '30.00', unit: 'libra', category: null, image: { present: false, thumbnail_path: null } } })
+    window.history.replaceState({}, '', '/tienda-maria/products/9')
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Arroz' })).toBeInTheDocument()
+    expect(publicStorefrontApi.fetchPublicProduct).toHaveBeenCalledWith('tienda-maria', '9', expect.any(AbortSignal))
+    expect(authApi.refreshAuth).not.toHaveBeenCalled()
   })
 
   it('logs in, stores the session, and shows the neutral customer dashboard', async () => {

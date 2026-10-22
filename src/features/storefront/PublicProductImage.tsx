@@ -31,7 +31,9 @@ export function PublicProductImage({ path, alt, size = 64 }: Props) {
     }
   }, [isNearViewport, path])
 
-  const frameSx = { width: size, height: size, flexShrink: 0, borderRadius: 2, overflow: 'hidden' }
+  const frameSx = size === '100%'
+    ? { width: '100%', aspectRatio: '1 / 1', flexShrink: 0, borderRadius: 2, overflow: 'hidden' }
+    : { width: size, height: size, flexShrink: 0, borderRadius: 2, overflow: 'hidden' }
   const content = path && (!isNearViewport || state.path !== path || state.loading)
     ? <Skeleton variant="rounded" aria-label={t('imageLoading', { name: alt })} sx={{ width: '100%', height: '100%' }} />
     : !state.src || state.path !== path

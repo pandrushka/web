@@ -30,5 +30,7 @@
   "imageLoading": "Loading {{name}}",
   "imagePlaceholder": "{{name}} placeholder",
   "catalogLoadError": "Could not load this store’s catalog.",
-  "loadMoreError": "Could not load more products."
+  "loadMoreError": "Could not load more products.",
+  "backToStore": "Back to store",
+  "productNotFoundTitle": "Product not found"
 }
