@@ -29,6 +29,8 @@ export type StoreRole = 'owner' | 'admin' | 'employee'
 
 type NavItem = { id: DashboardSection; label: string; icon: ReactNode; comingSoon?: boolean }
 
+const DASHBOARD_HEADER_HEIGHT = { xs: 64, sm: 72 } as const
+
 type DashboardLayoutProps = {
   email: string
   role: string
@@ -103,42 +105,77 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
   }
 
   const sidebar = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: sidebarCollapsed ? 1 : 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', px: sidebarCollapsed ? 0 : 1, py: 1.5 }}>
-        <ButtonBase aria-label={t('nav.goDashboard')} onClick={() => handleNavigate('dashboard')} sx={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', width: '100%', minHeight: 44, borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
+      <Box data-testid="dashboard-sidebar-brand" sx={{ height: DASHBOARD_HEADER_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', px: sidebarCollapsed ? 1 : 3 }}>
+        <ButtonBase aria-label={t('nav.goDashboard')} onClick={() => handleNavigate('dashboard')} sx={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', width: '100%', minWidth: 0, minHeight: 44, borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
           <TuPulperiaLogo variant={sidebarCollapsed ? 'icon' : 'horizontal'} size={sidebarCollapsed ? 'medium' : 'small'} alt="" />
         </ButtonBase>
       </Box>
       <Divider />
-      {canSwitchContext && (
-        <FormControl fullWidth={!sidebarCollapsed} size="small" sx={{ my: 1, ...(sidebarCollapsed ? { width: 56, mx: 'auto' } : {}) }}>
-          <InputLabel id="dashboard-context-label" sx={sidebarCollapsed ? { position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 } : undefined}>{t('nav.context')}</InputLabel>
-          <Select labelId="dashboard-context-label" id="dashboard-context" value={context} label={t('nav.context')} onChange={handleContextChange} renderValue={(value) => sidebarCollapsed ? (value === 'platform' ? <DashboardOutlinedIcon fontSize="small" /> : <StorefrontOutlinedIcon fontSize="small" />) : undefined}>
-            {isPlatformAdmin && <MenuItem value="platform">{t('roles.superAdmin')}</MenuItem>}
-            {storeRoleLabel && <MenuItem value={storeRole === 'employee' ? 'employee' : 'store'}>{storeRoleLabel}</MenuItem>}
-          </Select>
-        </FormControl>
-      )}
-      <List id="dashboard-navigation" component="nav" aria-label={t('nav.main')} sx={{ display: 'grid', gap: 0.5, py: 2 }}>
-        {items.map((item) => (
-          <Tooltip key={item.id} title={sidebarCollapsed ? item.label : ''} placement="right">
-            <span>
+      <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', px: sidebarCollapsed ? 1 : 2, py: 1 }}>
+        {canSwitchContext && (
+          <FormControl fullWidth={!sidebarCollapsed} size="small" sx={{ my: 1, ...(sidebarCollapsed ? { width: 56, mx: 'auto' } : {}) }}>
+            <InputLabel id="dashboard-context-label" sx={sidebarCollapsed ? { position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 } : undefined}>{t('nav.context')}</InputLabel>
+            <Select labelId="dashboard-context-label" id="dashboard-context" value={context} label={t('nav.context')} onChange={handleContextChange} renderValue={(value) => sidebarCollapsed ? (value === 'platform' ? <DashboardOutlinedIcon fontSize="small" /> : <StorefrontOutlinedIcon fontSize="small" />) : undefined}>
+              {isPlatformAdmin && <MenuItem value="platform">{t('roles.superAdmin')}</MenuItem>}
+              {storeRoleLabel && <MenuItem value={storeRole === 'employee' ? 'employee' : 'store'}>{storeRoleLabel}</MenuItem>}
+            </Select>
+          </FormControl>
+        )}
+        <List id="dashboard-navigation" component="nav" aria-label={t('nav.main')} sx={{ display: 'grid', gap: 0.5, width: '100%', minWidth: 0, py: 1 }}>
+          {items.map((item) => {
+            const comingSoonLabel = item.comingSoon ? t('common:states.comingSoon') : ''
+            const accessibleLabel = item.comingSoon ? `${item.label} ${comingSoonLabel}` : item.label
+            const needsFullLabel = sidebarCollapsed || item.label.length > 24 || item.comingSoon
+
+            return (
+              <Tooltip key={item.id} title={needsFullLabel ? accessibleLabel : ''} placement="right">
+                <span style={{ display: 'block', minWidth: 0, width: '100%' }}>
               <ListItemButton
                 selected={!item.comingSoon && activeSection === item.id}
                 disabled={item.comingSoon}
-                aria-label={sidebarCollapsed ? item.label : undefined}
+                aria-label={needsFullLabel ? accessibleLabel : undefined}
                 aria-current={!item.comingSoon && activeSection === item.id ? 'page' : undefined}
                 onClick={() => handleNavigate(item.id)}
-                sx={{ borderRadius: 2, minHeight: 48, justifyContent: sidebarCollapsed ? 'center' : 'flex-start', px: sidebarCollapsed ? 1 : 2, '&.Mui-selected': { color: 'primary.main', bgcolor: 'primary.light' } }}
+                sx={{
+                  boxSizing: 'border-box',
+                  width: '100%',
+                  minWidth: 0,
+                  minHeight: item.comingSoon && !sidebarCollapsed ? 60 : 48,
+                  justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                  alignItems: 'center',
+                  gap: sidebarCollapsed ? 0 : 1,
+                  borderRadius: 2,
+                  px: sidebarCollapsed ? 1 : 1.5,
+                  overflow: 'hidden',
+                  '&.Mui-selected': { color: 'primary.main', bgcolor: 'primary.light' },
+                  '&.Mui-selected:hover': { bgcolor: 'primary.light' },
+                  '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+                }}
               >
-                <ListItemIcon sx={{ minWidth: sidebarCollapsed ? 0 : 40, justifyContent: 'center', color: 'inherit' }}>{item.icon}</ListItemIcon>
-                {!sidebarCollapsed && <ListItemText primary={item.label} />}
-                {!sidebarCollapsed && item.comingSoon && <Chip size="small" label={t('common:states.comingSoon')} variant="outlined" />}
+                <ListItemIcon sx={{ flexShrink: 0, minWidth: sidebarCollapsed ? 0 : 36, width: sidebarCollapsed ? 'auto' : 36, justifyContent: 'center', color: 'inherit' }}>{item.icon}</ListItemIcon>
+                {!sidebarCollapsed && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, flex: 1, minWidth: 0 }}>
+                    <Typography component="span" variant="body2" sx={{
+                      display: '-webkit-box',
+                      minWidth: 0,
+                      width: '100%',
+                      overflow: 'hidden',
+                      overflowWrap: 'anywhere',
+                      WebkitBoxOrient: 'vertical',
+                      WebkitLineClamp: 2,
+                      lineHeight: 1.35,
+                    }}>{item.label}</Typography>
+                    {item.comingSoon && <Chip size="small" label={comingSoonLabel} variant="outlined" sx={{ maxWidth: '100%', height: 20, '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem', whiteSpace: 'nowrap' } }} />}
+                  </Box>
+                )}
               </ListItemButton>
-            </span>
-          </Tooltip>
-        ))}
-      </List>
+                </span>
+              </Tooltip>
+            )
+          })}
+        </List>
+      </Box>
     </Box>
   )
 
@@ -151,7 +188,7 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
       )}
       <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
         <AppBar position="sticky">
-          <Toolbar sx={{ minHeight: { xs: 64, sm: 72 }, gap: 1.5 }}>
+          <Toolbar sx={{ height: DASHBOARD_HEADER_HEIGHT, minHeight: DASHBOARD_HEADER_HEIGHT, boxSizing: 'border-box', gap: 1.5 }}>
             {!desktop && <IconButton edge="start" color="inherit" aria-label={t('nav.open')} aria-controls="dashboard-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)} sx={{ minWidth: 48, minHeight: 48 }}><MenuOutlinedIcon /></IconButton>}
             {desktop ? (
               <IconButton aria-label={desktopCollapsed ? t('nav.expand') : t('nav.collapse')} onClick={() => setDesktopCollapsed((collapsed) => !collapsed)} sx={{ minWidth: 44, minHeight: 44 }}>
