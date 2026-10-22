@@ -3,6 +3,7 @@ import { Alert, Avatar, Box, Button, Card, CardActionArea, CardContent, Chip, Ci
 import { fetchAllStores, fetchMyStores } from '../api/stores'
 import type { PlatformStoresResponse, StoreProfile } from '../api/stores'
 import { storeMembershipRoleLabel } from '../utils/roleLabels'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
 type StoreDirectoryProps = {
   kind: 'member' | 'platform'
@@ -19,16 +20,19 @@ function statusColor(status: string): 'default' | 'success' | 'warning' | 'error
 }
 
 export function StoreDirectory({ kind, accessToken, onMemberStoresLoaded, onSelectStore }: StoreDirectoryProps) {
-  const [stores, setStores] = useState<StoreProfile[]>([])
-  const [pagination, setPagination] = useState<PlatformStoresResponse['pagination'] | null>(null)
+  const { t, i18n } = useAppTranslation(['stores', 'common'])
+  const formatNumber = new Intl.NumberFormat(i18n.resolvedLanguage === 'en' ? 'en-US' : 'es-NI').format
+  const [result, setResult] = useState<{ key: string; stores: StoreProfile[]; pagination: PlatformStoresResponse['pagination'] | null; error: string | null }>({ key: '', stores: [], pagination: null, error: null })
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const requestKey = `${kind}:${accessToken}:${page}`
+  const currentResult = result.key === requestKey ? result : null
+  const stores = currentResult?.stores ?? []
+  const pagination = currentResult?.pagination ?? null
+  const loading = currentResult === null
+  const error = currentResult?.error ?? null
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
 
     const request = kind === 'member'
       ? fetchMyStores(accessToken)
@@ -36,25 +40,27 @@ export function StoreDirectory({ kind, accessToken, onMemberStoresLoaded, onSele
 
     void request.then((response) => {
       if (cancelled) return
-      setStores(response.stores)
-      if (kind === 'platform') setPagination((response as PlatformStoresResponse).pagination)
-      else onMemberStoresLoaded?.(response.stores)
+      setResult({
+        key: requestKey,
+        stores: response.stores,
+        pagination: kind === 'platform' ? (response as PlatformStoresResponse).pagination : null,
+        error: null,
+      })
+      if (kind === 'member') onMemberStoresLoaded?.(response.stores)
     }).catch((requestError: unknown) => {
-      if (!cancelled) setError(requestError instanceof Error ? requestError.message : 'Could not load stores.')
-    }).finally(() => {
-      if (!cancelled) setLoading(false)
+      if (!cancelled) setResult({ key: requestKey, stores: [], pagination: null, error: requestError instanceof Error ? requestError.message : t('list.error', { ns: 'stores' }) })
     })
 
     return () => { cancelled = true }
-  }, [accessToken, kind, onMemberStoresLoaded, page])
+  }, [accessToken, kind, onMemberStoresLoaded, page, requestKey, t])
 
-  if (loading) return <Stack sx={{ py: 8, alignItems: 'center' }}><CircularProgress aria-label="Loading stores" /></Stack>
+  if (loading) return <Stack sx={{ py: 8, alignItems: 'center' }}><CircularProgress aria-label={t('list.loading', { ns: 'stores' })} /></Stack>
   if (error) return <Alert severity="error">{error}</Alert>
   if (stores.length === 0) {
     return (
       <Card><CardContent sx={{ py: { xs: 4, sm: 6 }, textAlign: 'center' }}>
-        <Typography variant="h6" gutterBottom>{kind === 'member' ? 'No store access yet' : 'No stores found'}</Typography>
-        <Typography color="text.secondary">{kind === 'member' ? 'Stores available to your account will appear here.' : 'There are no stores to display.'}</Typography>
+        <Typography variant="h6" gutterBottom>{kind === 'member' ? t('list.noAccess', { ns: 'stores' }) : t('list.noStores', { ns: 'stores' })}</Typography>
+        <Typography color="text.secondary">{kind === 'member' ? t('list.memberEmpty', { ns: 'stores' }) : t('list.empty', { ns: 'stores' })}</Typography>
       </CardContent></Card>
     )
   }
@@ -63,7 +69,8 @@ export function StoreDirectory({ kind, accessToken, onMemberStoresLoaded, onSele
     <Stack spacing={2.5}>
       <Grid container spacing={2}>
         {stores.map((store) => {
-          const membershipRoleLabel = storeMembershipRoleLabel(store.membership?.role)
+          const rawRole = store.membership?.role
+          const membershipRoleLabel = rawRole === 'owner' ? t('roles.owner', { ns: 'dashboard' }) : rawRole === 'admin' ? t('roles.admin', { ns: 'dashboard' }) : rawRole === 'employee' ? t('roles.employee', { ns: 'dashboard' }) : storeMembershipRoleLabel(rawRole, (key) => t(key, { ns: 'dashboard' }))
           const content = (
             <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
@@ -76,7 +83,7 @@ export function StoreDirectory({ kind, accessToken, onMemberStoresLoaded, onSele
                 </Box>
               </Stack>
               <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}>
-                <Chip size="small" label={store.status} color={statusColor(store.status)} sx={{ textTransform: 'capitalize' }} />
+                <Chip size="small" label={t(`common:states.${store.status}`)} color={statusColor(store.status)} sx={{ textTransform: 'capitalize' }} />
                 {membershipRoleLabel && <Chip size="small" label={membershipRoleLabel} variant="outlined" />}
               </Stack>
             </CardContent>
@@ -85,7 +92,7 @@ export function StoreDirectory({ kind, accessToken, onMemberStoresLoaded, onSele
           return (
             <Grid key={store.id} size={{ xs: 12, sm: 6, lg: 4 }}>
               <Card sx={{ height: '100%' }}>
-                {onSelectStore ? <CardActionArea onClick={() => onSelectStore(store)} aria-label={`View ${store.name} details`} sx={{ height: '100%' }}>{content}</CardActionArea> : content}
+                {onSelectStore ? <CardActionArea onClick={() => onSelectStore(store)} aria-label={t('list.viewDetails', { name: store.name })} sx={{ height: '100%' }}>{content}</CardActionArea> : content}
               </Card>
             </Grid>
           )
@@ -93,10 +100,10 @@ export function StoreDirectory({ kind, accessToken, onMemberStoresLoaded, onSele
       </Grid>
       {kind === 'platform' && pagination && pagination.total_pages > 1 && (
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="body2" color="text.secondary">Page {pagination.page} of {pagination.total_pages} · {pagination.total_count} stores</Typography>
+          <Typography variant="body2" color="text.secondary">{t('list.pagination', { page: formatNumber(pagination.page), pages: formatNumber(pagination.total_pages), count: formatNumber(pagination.total_count) })}</Typography>
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</Button>
-            <Button variant="outlined" disabled={page >= pagination.total_pages} onClick={() => setPage((current) => current + 1)}>Next</Button>
+            <Button variant="outlined" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>{t('list.previous', { ns: 'stores' })}</Button>
+            <Button variant="outlined" disabled={page >= pagination.total_pages} onClick={() => setPage((current) => current + 1)}>{t('list.next', { ns: 'stores' })}</Button>
           </Stack>
         </Stack>
       )}

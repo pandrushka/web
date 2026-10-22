@@ -17,7 +17,8 @@ import {
 } from '@mui/material'
 import type { NewQuestionPayload, Question, QuestionType } from '../types/onboarding'
 import { questionTypes } from '../types/onboarding'
-import { formatQuestionType, parseOptions } from '../utils/onboarding'
+import { parseOptions } from '../utils/onboarding'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
 type AdminQuestionPanelProps = {
   questions: Question[]
@@ -27,6 +28,7 @@ type AdminQuestionPanelProps = {
 }
 
 export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCreateQuestion }: AdminQuestionPanelProps) {
+  const { t } = useAppTranslation('legacy')
   const [prompt, setPrompt] = useState('')
   const [questionType, setQuestionType] = useState<QuestionType>('text')
   const [position, setPosition] = useState(questions.length + 1)
@@ -62,10 +64,10 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
         <Stack spacing={3}>
           <Stack spacing={1}>
             <Typography color="secondary" sx={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.08em' }}>
-              ADMIN QUESTION MANAGEMENT
+              {t('adminEyebrow')}
             </Typography>
             <Typography variant="h2" sx={{ fontSize: { xs: 28, md: 38 }, lineHeight: 1.05 }}>
-              Edit what users see during account creation.
+              {t('adminTitle')}
             </Typography>
           </Stack>
 
@@ -82,7 +84,7 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
                     <Stack spacing={0.5}>
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                         <Chip size="small" label={`#${question.position}`} />
-                        <Chip size="small" label={formatQuestionType(question.question_type)} />
+                        <Chip size="small" label={t(`questionTypes.${question.question_type}`)} />
                       </Stack>
                       <Typography sx={{ fontWeight: 700 }}>{question.prompt}</Typography>
                     </Stack>
@@ -93,7 +95,7 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
                           onChange={(event) => onToggleQuestion(question, event.target.checked)}
                         />
                       }
-                      label={question.active ? 'Active' : 'Inactive'}
+                      label={question.active ? t('active') : t('inactive')}
                     />
                   </Stack>
                 </CardContent>
@@ -105,10 +107,10 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
 
           <Box component="form" onSubmit={handleCreate} sx={{ display: 'grid', gap: 2 }}>
             <Typography variant="h6">
-              Add a new question
+              {t('addQuestionTitle')}
             </Typography>
             <TextField
-              label="Question prompt"
+              label={t('prompt')}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               required
@@ -117,19 +119,19 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 select
-                label="Question type"
+                label={t('questionType')}
                 value={questionType}
                 onChange={(event) => setQuestionType(event.target.value as QuestionType)}
                 fullWidth
               >
                 {questionTypes.map((type) => (
                   <MenuItem key={type} value={type}>
-                    {formatQuestionType(type)}
+                    {t(`questionTypes.${type}`)}
                   </MenuItem>
                 ))}
               </TextField>
               <TextField
-                label="Position"
+                label={t('position')}
                 type="number"
                 value={position}
                 onChange={(event) => setPosition(Number(event.target.value))}
@@ -138,15 +140,15 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
             </Stack>
             <FormControlLabel
               control={<Switch checked={active} onChange={(event) => setActive(event.target.checked)} />}
-              label={active ? 'Active' : 'Inactive'}
+              label={active ? t('active') : t('inactive')}
             />
             {isSelectQuestion && (
               <TextField
-                label="Options"
+                label={t('options')}
                 value={optionsText}
                 onChange={(event) => setOptionsText(event.target.value)}
-                placeholder={'Long term|long_term\nCasual|casual'}
-                helperText="One option per line. Use Label|value, or just Label."
+                placeholder={t('optionsExample')}
+                helperText={t('optionsHelp')}
                 multiline
                 minRows={4}
                 required
@@ -154,7 +156,7 @@ export function AdminQuestionPanel({ questions, loading, onToggleQuestion, onCre
               />
             )}
             <Button type="submit" variant="contained" disabled={!canCreate || loading}>
-              Add question
+              {t('addQuestion')}
             </Button>
           </Box>
         </Stack>

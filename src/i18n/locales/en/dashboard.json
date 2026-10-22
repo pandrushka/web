@@ -1,0 +1,62 @@
+{
+  "titles": {
+    "platform": "Super Admin Dashboard",
+    "store": "{{role}} Dashboard",
+    "employee": "Employee Dashboard",
+    "customer": "Customer Dashboard",
+    "dashboard": "Dashboard",
+    "invitations": "Invitations",
+    "users": "Users",
+    "platformReports": "Platform Reports",
+    "platformSettings": "Platform Settings",
+    "products": "Products",
+    "productsCategories": "Products & Categories",
+    "orders": "Orders",
+    "sales": "Sales",
+    "storeSettings": "Store Settings"
+  },
+  "roles": {
+    "store": "Store",
+    "owner": "Store Owner",
+    "admin": "Store Admin",
+    "employee": "Employee",
+    "customer": "Customer",
+    "superAdmin": "Super Admin",
+    "legacyAdmin": "Admin"
+  },
+  "nav": {
+    "context": "Context",
+    "main": "Main navigation",
+    "open": "Open navigation",
+    "expand": "Expand navigation",
+    "collapse": "Collapse navigation",
+    "goDashboard": "Go to dashboard",
+    "account": "Account options",
+    "openAccountFor": "Open account menu for {{email}}"
+  },
+  "overview": {
+    "platformTitle": "All Stores",
+    "platformDescription": "View stores across the platform.",
+    "myStore": "My Store",
+    "myStoreDescription": "Manage your store information.",
+    "customerTitle": "Explore stores in your community",
+    "customerDescription": "Soon you will be able to discover and shop products from nearby stores.",
+    "noStores": "You do not have access to any stores yet.",
+    "loadError": "Could not load your stores.",
+    "loadingAccess": "Loading store access…",
+    "loadingPermissions": "Loading store permissions…",
+    "platformDashboard": "Platform dashboard",
+    "platformDashboardDescription": "All stores across the platform, including draft and suspended stores.",
+    "allStores": "All stores",
+    "membershipStores": "Stores available through your current memberships.",
+    "welcome": "Welcome to Tu Pulpería",
+    "customerPlaceholder": "Store browsing and ordering will be available here in a future update.",
+    "accessDeniedInvitations": "You do not have access to invitations.",
+    "accessDeniedProducts": "You do not have access to product management.",
+    "comingSoon": "This section is coming soon.",
+    "retry": "Retry",
+    "membershipError": "Could not load your store membership: {{error}}",
+    "backToMyStores": "Back to My Stores",
+    "invitationContextMissing": "Email verified. To continue store setup, reopen the original invitation link from the person who invited you."
+  }
+}

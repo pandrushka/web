@@ -45,7 +45,7 @@ describe('StoreInvitations', () => {
 
     vi.mocked(fetchStoreInvitations).mockRejectedValueOnce(new Error('Not allowed'))
     rerender(<StoreInvitations accessToken="new-jwt" />)
-    await waitFor(() => expect(screen.getByText(/Could not load invitations: Not allowed/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Could not load invitations\.: Not allowed/i))
     vi.mocked(fetchStoreInvitations).mockResolvedValueOnce({ invitations: [] })
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('No invitations yet')).toBeInTheDocument()
@@ -70,11 +70,12 @@ describe('StoreInvitations', () => {
     const link = await screen.findByLabelText('Invitation link')
     expect(link).toHaveValue(`${window.location.origin}/invite/one-time-token`)
     expect(screen.getByText(/expires in seven days/i)).toBeInTheDocument()
-    expect(screen.getByText('Invitación creada. Copia el enlace para compartirlo.')).toBeInTheDocument()
-    expect(screen.queryByText('Invitación creada y correo enviado.')).not.toBeInTheDocument()
+    expect(screen.getByText('Invitation created. Copy the link to share it.')).toBeInTheDocument()
+    expect(screen.queryByText('Invitation created and email sent.')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByDisplayValue(/one-time-token/)).not.toBeInTheDocument()
-    expect(window.localStorage.length).toBe(0)
+    expect(window.localStorage.getItem('tu-pulperia.language')).toBe('en')
+    expect(Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.getItem(window.localStorage.key(index) ?? '')).join(' ')).not.toContain('one-time-token')
   })
 
   it('validates email and supports recipient-restricted invitation creation', async () => {
@@ -90,7 +91,7 @@ describe('StoreInvitations', () => {
     await user.type(screen.getByLabelText('Recipient email (optional)'), 'buyer@example.com')
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
     await screen.findByLabelText('Invitation link')
-    expect(await screen.findByText('Invitación creada y correo enviado.')).toBeInTheDocument()
+    expect(await screen.findByText('Invitation created and email sent.')).toBeInTheDocument()
     expect(createStoreInvitation).toHaveBeenCalledWith('jwt', 'buyer@example.com')
   })
 
@@ -104,7 +105,7 @@ describe('StoreInvitations', () => {
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
     await user.click(await screen.findByRole('button', { name: 'Copy Link' }))
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/invite/copy-token`)
-    expect(await screen.findByText('Invitation link copied.')).toBeInTheDocument()
+    expect(await screen.findByText('Link copied.')).toBeInTheDocument()
   })
 
   it('requires revoke confirmation and refreshes only after server success', async () => {
@@ -147,8 +148,8 @@ describe('StoreInvitations', () => {
     await user.type(screen.getByLabelText('Recipient email (optional)'), 'buyer@example.com')
     await user.click(screen.getByRole('button', { name: 'Create invitation' }))
 
-    expect(await screen.findByText('La invitación fue creada, pero no se pudo enviar el correo. Puedes copiar el enlace y compartirlo manualmente.')).toBeInTheDocument()
-    expect(screen.queryByText('Invitación creada y correo enviado.')).not.toBeInTheDocument()
+    expect(await screen.findByText('The invitation was created, but the email could not be sent. You can copy the link and share it manually.')).toBeInTheDocument()
+    expect(screen.queryByText('Invitation created and email sent.')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Copy Link' }))
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/invite/manual-share-token`)
   })
@@ -162,15 +163,15 @@ describe('StoreInvitations', () => {
     render(<StoreInvitations accessToken="jwt" />)
 
     await user.click(await screen.findByRole('button', { name: 'Resend Invitation' }))
-    expect(screen.getByText('¿Deseas reenviar esta invitación a owner@example.test?')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Reenviar invitación' }))
+    expect(screen.getByText('Do you want to resend this invitation to owner@example.test?')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Resend Invitation' }))
     const sendingButton = await screen.findByRole('button', { name: 'Sending invitation' })
     expect(sendingButton).toBeDisabled()
     expect(resendStoreInvitation).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('progressbar')).toBeInTheDocument()
     resolveResend?.({ invitation: emailedInvitation, email_delivery_status: 'sent' })
 
-    expect(await screen.findByText('La invitación se ha enviado nuevamente.')).toBeInTheDocument()
+    expect(await screen.findByText('The invitation was sent again.')).toBeInTheDocument()
     expect(resendStoreInvitation).toHaveBeenCalledWith('jwt', emailedInvitation.id)
     expect(fetchStoreInvitations).toHaveBeenCalledTimes(2)
   })
@@ -183,9 +184,9 @@ describe('StoreInvitations', () => {
     render(<StoreInvitations accessToken="jwt" />)
 
     await user.click(await screen.findByRole('button', { name: 'Retry Email' }))
-    await user.click(screen.getByRole('button', { name: 'Reenviar invitación' }))
-    expect(await screen.findByText('No se pudo enviar el correo. Inténtalo de nuevo.')).toBeInTheDocument()
-    expect(screen.queryByText('La invitación se ha enviado nuevamente.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Resend Invitation' }))
+    expect(await screen.findByText('The email could not be sent. Please try again.')).toBeInTheDocument()
+    expect(screen.queryByText('The invitation was sent again.')).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'Retry Email' })).toBeInTheDocument()
   })
 
@@ -198,9 +199,9 @@ describe('StoreInvitations', () => {
     render(<StoreInvitations accessToken="jwt" />)
 
     await user.click(await screen.findByRole('button', { name: 'Resend Invitation' }))
-    await user.click(screen.getByRole('button', { name: 'Reenviar invitación' }))
-    expect(await screen.findAllByText(/Límite de reenvíos alcanzado/)).toHaveLength(1)
-    expect(await screen.findByRole('button', { name: /Reintentar en (?:1 min|\d+s)/ })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Resend Invitation' }))
+    expect(await screen.findAllByText(/Resend limit reached/)).toHaveLength(1)
+    expect(await screen.findByRole('button', { name: /Retry in (?:1 minute|\d+ seconds)/ })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(await screen.findByRole('button', { name: 'Renewal required' })).toBeDisabled()

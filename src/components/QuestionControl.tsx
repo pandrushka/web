@@ -1,5 +1,6 @@
 import { Checkbox, FormControl, FormControlLabel, Radio, RadioGroup, Stack, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import type { AnswerValue, Question } from '../types/onboarding'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
 type QuestionControlProps = {
   question: Question
@@ -8,10 +9,11 @@ type QuestionControlProps = {
 }
 
 export function QuestionControl({ question, value, onChange }: QuestionControlProps) {
+  const { t } = useAppTranslation('legacy')
   if (question.question_type === 'number') {
     return (
       <TextField
-        label="Your answer"
+        label={t('answer')}
         type="number"
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value === '' ? '' : Number(event.target.value))}
@@ -28,10 +30,10 @@ export function QuestionControl({ question, value, onChange }: QuestionControlPr
         onChange={(_, nextValue: string | null) => {
           if (nextValue) onChange(nextValue === 'true')
         }}
-        aria-label="Boolean answer"
+        aria-label={t('booleanAnswer')}
       >
-        <ToggleButton value="true">Yes</ToggleButton>
-        <ToggleButton value="false">No</ToggleButton>
+        <ToggleButton value="true">{t('yes')}</ToggleButton>
+        <ToggleButton value="false">{t('no')}</ToggleButton>
       </ToggleButtonGroup>
     )
   }
@@ -77,7 +79,7 @@ export function QuestionControl({ question, value, onChange }: QuestionControlPr
 
   return (
     <TextField
-      label="Your answer"
+      label={t('answer')}
       value={value ?? ''}
       onChange={(event) => onChange(event.target.value)}
       multiline

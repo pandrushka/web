@@ -1,14 +1,12 @@
 import { Box, Stack, Typography } from '@mui/material'
 import { TuPulperiaLogo } from './TuPulperiaLogo'
-import { authCopy, type AuthLocale } from '../i18n/authCopy'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
-type LandingPageProps = { locale?: AuthLocale }
-
-export function LandingPage({ locale = 'es' }: LandingPageProps) {
-  const copy = authCopy[locale]
+export function LandingPage() {
+  const { t, i18n } = useAppTranslation('auth')
   return (
     <Box
-      lang={locale}
+      lang={i18n.resolvedLanguage}
       sx={{
         display: 'grid',
         gap: { xs: 3, md: 4 },
@@ -20,10 +18,10 @@ export function LandingPage({ locale = 'es' }: LandingPageProps) {
         <TuPulperiaLogo variant="tagline" size="large" sx={{ width: { xs: 260, sm: 320, md: 380 } }} />
         <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
           <Typography component="h1" variant="h1" sx={{ fontSize: { xs: 30, sm: 38, md: 44 }, lineHeight: 1.15, maxWidth: 720 }}>
-            {copy.headline}
+            {t('headline')}
           </Typography>
           <Typography color="text.secondary" sx={{ fontSize: { xs: 16, md: 18 }, maxWidth: 560 }}>
-            {copy.introduction}
+            {t('introduction')}
           </Typography>
         </Stack>
       </Stack>

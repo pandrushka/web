@@ -1,17 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearProductImageCache, fetchProductImage, productImageCacheSize, removeProductImage, uploadProductImage } from './productImages'
+import i18n from '../i18n'
 
 const fetchMock = vi.fn()
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals()
   fetchMock.mockReset()
   clearProductImageCache()
+  await i18n.changeLanguage('es')
 })
 
 describe('product image API', () => {
   it('uploads multipart form data without overriding its boundary content type', async () => {
+    await i18n.changeLanguage('en')
     fetchMock.mockResolvedValueOnce(jsonResponse({ product: { id: 12, image: { present: true, thumbnail_path: '/api/v1/stores/4/products/12/image' } } }))
     vi.stubGlobal('fetch', fetchMock)
     const image = new File(['image'], 'drink.webp', { type: 'image/webp' })
@@ -21,18 +24,24 @@ describe('product image API', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('http://localhost:3000/api/v1/stores/4/products/12/image')
     expect(init.method).toBe('PUT')
-    expect(init.headers).toEqual({ Authorization: 'Bearer jwt' })
+    expect((init.headers as Headers).get('authorization')).toBe('Bearer jwt')
+    expect((init.headers as Headers).get('accept-language')).toBe('en')
     expect(init.body).toBeInstanceOf(FormData)
     expect((init.body as FormData).get('image')).toBe(image)
   })
 
   it('deletes images using the member endpoint and returns presence metadata', async () => {
+    await i18n.changeLanguage('es')
     fetchMock.mockResolvedValueOnce(jsonResponse({ product: { id: 12, image: { present: false, thumbnail_path: null } } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await removeProductImage('jwt', 4, 12)
 
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:3000/api/v1/stores/4/products/12/image', expect.objectContaining({ method: 'DELETE', headers: { Authorization: 'Bearer jwt', 'Content-Type': 'application/json' } }))
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.method).toBe('DELETE')
+    expect((init.headers as Headers).get('authorization')).toBe('Bearer jwt')
+    expect((init.headers as Headers).get('accept-language')).toBe('es')
+    expect((init.headers as Headers).get('content-type')).toBe('application/json')
   })
 
   it('invalidates the cached thumbnail after a successful replacement', async () => {
@@ -49,6 +58,7 @@ describe('product image API', () => {
   })
 
   it('authenticates thumbnail requests, refreshes after 401, and caches per account and endpoint', async () => {
+    await i18n.changeLanguage('es')
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(new Response(new TextEncoder().encode('webp'), { status: 200, headers: { 'Content-Type': 'image/webp' } }))
       .mockResolvedValueOnce(new Response(new TextEncoder().encode('account 2'), { status: 200 }))
@@ -66,8 +76,8 @@ describe('product image API', () => {
     expect(first.type).toBe('image/webp')
     expect(refresh).toHaveBeenCalledOnce()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0][1].headers).toEqual({ Authorization: 'Bearer expired-jwt' })
-    expect(fetchMock.mock.calls[1][1].headers).toEqual({ Authorization: 'Bearer fresh-jwt' })
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({ Authorization: 'Bearer expired-jwt', 'Accept-Language': 'es' })
+    expect(fetchMock.mock.calls[1][1].headers).toEqual({ Authorization: 'Bearer fresh-jwt', 'Accept-Language': 'es' })
     await fetchProductImage(path, 'another-jwt', 'user-9', refresh)
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })

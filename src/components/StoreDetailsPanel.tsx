@@ -8,6 +8,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined'
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined'
 import { StorefrontPreview } from '../features/storefront/components/StorefrontPreview'
 import type { ImageTokenRefresh } from '../api/productImages'
+import { useAppTranslation } from '../i18n/useAppTranslation'
 
 type Props = {
   storeId: number
@@ -28,37 +29,36 @@ function errorKind(message: string) {
   return 'error'
 }
 
-export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBack, backLabel = 'Back to All Stores', onStoreUpdated, cacheScope, refreshAccessToken, membershipRole }: Props) {
-  const [store, setStore] = useState<StoreProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBack, backLabel, onStoreUpdated, cacheScope, refreshAccessToken, membershipRole }: Props) {
+  const { t } = useAppTranslation(['stores', 'common'])
+  const [loadState, setLoadState] = useState<{ key: string; store: StoreProfile | null; error: string | null }>({ key: '', store: null, error: null })
   const [attempt, setAttempt] = useState(0)
-  const [previewing, setPreviewing] = useState(false)
+  const [previewingKey, setPreviewingKey] = useState<string | null>(null)
   const [transitionTarget, setTransitionTarget] = useState<'publish' | 'unpublish' | null>(null)
   const [transitioning, setTransitioning] = useState(false)
   const [publicationMessage, setPublicationMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const onStoreUpdatedRef = useRef(onStoreUpdated)
+  const requestKey = `${source}:${storeId}:${accessToken}:${attempt}`
+  const currentLoad = loadState.key === requestKey ? loadState : null
+  const store = currentLoad?.store ?? null
+  const error = currentLoad?.error ?? null
+  const loading = currentLoad === null
+  const previewing = previewingKey === requestKey && store !== null
 
   useEffect(() => { onStoreUpdatedRef.current = onStoreUpdated }, [onStoreUpdated])
 
   useEffect(() => {
     let cancelled = false
-    setStore(null)
-    setPreviewing(false)
-    setLoading(true)
-    setError(null)
     const request = source === 'member' ? fetchStore(accessToken, storeId) : fetchAdminStore(accessToken, storeId)
     void request.then(({ store: fetchedStore }) => {
       if (cancelled) return
-      setStore(fetchedStore)
+      setLoadState({ key: requestKey, store: fetchedStore, error: null })
       onStoreUpdatedRef.current(fetchedStore)
     }).catch((requestError: unknown) => {
-      if (!cancelled) setError(requestError instanceof Error ? requestError.message : 'Could not load store details.')
-    }).finally(() => {
-      if (!cancelled) setLoading(false)
+      if (!cancelled) setLoadState({ key: requestKey, store: null, error: requestError instanceof Error ? requestError.message : t('details.error', { ns: 'stores' }) })
     })
     return () => { cancelled = true }
-  }, [accessToken, attempt, source, storeId])
+  }, [accessToken, attempt, requestKey, source, storeId, t])
 
   async function saveStore(id: number, changes: Parameters<typeof updateStore>[2]) {
     const { store: updated } = await updateStore(accessToken, id, changes)
@@ -73,12 +73,12 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
       const response = transitionTarget === 'publish'
         ? await publishStore(accessToken, store.id)
         : await unpublishStore(accessToken, store.id)
-      setStore(response.store)
+      setLoadState({ key: requestKey, store: response.store, error: null })
       onStoreUpdated(response.store)
-      setPublicationMessage({ type: 'success', text: transitionTarget === 'publish' ? 'Store published.' : 'Store unpublished.' })
+      setPublicationMessage({ type: 'success', text: transitionTarget === 'publish' ? t('publication.published', { ns: 'stores' }) : t('publication.unpublished', { ns: 'stores' }) })
       setTransitionTarget(null)
     } catch (requestError) {
-      setPublicationMessage({ type: 'error', text: requestError instanceof Error ? requestError.message : 'Could not update publication status.' })
+      setPublicationMessage({ type: 'error', text: requestError instanceof Error ? requestError.message : t('publication.error', { ns: 'stores' }) })
       setTransitionTarget(null)
     } finally {
       setTransitioning(false)
@@ -90,25 +90,25 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
     const url = `${window.location.origin}/${encodeURIComponent(store.slug)}`
     try {
       await navigator.clipboard.writeText(url)
-      setPublicationMessage({ type: 'success', text: 'Store link copied.' })
+      setPublicationMessage({ type: 'success', text: t('publication.copied', { ns: 'stores' }) })
     } catch {
-      setPublicationMessage({ type: 'error', text: 'Could not copy the store link. Please copy it from your browser address bar.' })
+      setPublicationMessage({ type: 'error', text: t('publication.copyError', { ns: 'stores' }) })
     }
   }
 
   const kind = error ? errorKind(error) : null
 
-  if (previewing && store) return <StorefrontPreview store={store} accessToken={accessToken} catalogSource={editable ? 'member' : 'platform'} cacheScope={cacheScope} refreshAccessToken={refreshAccessToken} onReturn={() => setPreviewing(false)} />
+  if (previewing && store) return <StorefrontPreview store={store} accessToken={accessToken} catalogSource={editable ? 'member' : 'platform'} cacheScope={cacheScope} refreshAccessToken={refreshAccessToken} onReturn={() => setPreviewingKey(null)} />
 
   return (
     <Stack spacing={2.5}>
-      {onBack && <Button onClick={onBack} sx={{ alignSelf: 'flex-start', minHeight: 48 }}>{backLabel}</Button>}
-      <Typography variant="h4" component="h2">Store details</Typography>
+      {onBack && <Button onClick={onBack} sx={{ alignSelf: 'flex-start', minHeight: 48 }}>{backLabel ?? t('details.backToStores', { ns: 'stores' })}</Button>}
+      <Typography variant="h4" component="h2">{t('details.title', { ns: 'stores' })}</Typography>
       {loading ? (
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', py: 4 }}><CircularProgress size={24} aria-label="Loading store details" /><Typography color="text.secondary">Loading store details…</Typography></Stack>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', py: 4 }}><CircularProgress size={24} aria-label={t('details.loading', { ns: 'stores' })} /><Typography color="text.secondary">{t('details.loading', { ns: 'stores' })}</Typography></Stack>
       ) : error ? (
-        <Alert severity={kind === 'error' ? 'error' : 'warning'} action={kind === 'error' ? <Button color="inherit" size="small" onClick={() => setAttempt((value) => value + 1)}>Retry</Button> : undefined}>
-          {kind === 'forbidden' ? 'You do not have permission to view this store.' : kind === 'not-found' ? 'This store could not be found.' : error}
+        <Alert severity={kind === 'error' ? 'error' : 'warning'} action={kind === 'error' ? <Button color="inherit" size="small" onClick={() => setAttempt((value) => value + 1)}>{t('list.retry', { ns: 'stores' })}</Button> : undefined}>
+          {kind === 'forbidden' ? t('details.forbidden', { ns: 'stores' }) : kind === 'not-found' ? t('details.notFound', { ns: 'stores' }) : error}
         </Alert>
       ) : store ? (
         <>
@@ -116,24 +116,24 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap' }}>
             {(source === 'member' || membershipRole === 'owner') && (store.membership?.role === 'owner' || membershipRole === 'owner') && store.status !== 'suspended' && (
               <Button variant="contained" disabled={transitioning} onClick={() => setTransitionTarget(store.status === 'draft' ? 'publish' : 'unpublish')} sx={{ minHeight: 48 }}>
-                {store.status === 'draft' ? 'Publish Store' : 'Unpublish Store'}
+                {store.status === 'draft' ? t('publication.publish', { ns: 'stores' }) : t('publication.unpublish', { ns: 'stores' })}
               </Button>
             )}
             {store.status === 'active' && <>
-              <Button startIcon={<ContentCopyOutlinedIcon />} variant="outlined" onClick={() => void copyStoreLink()} sx={{ minHeight: 48 }}>Copy Store Link</Button>
-              <Button startIcon={<OpenInNewOutlinedIcon />} variant="outlined" component="a" href={`/${encodeURIComponent(store.slug)}`} target="_blank" rel="noreferrer" sx={{ minHeight: 48 }}>Open Public Store</Button>
+              <Button startIcon={<ContentCopyOutlinedIcon />} variant="outlined" onClick={() => void copyStoreLink()} sx={{ minHeight: 48 }}>{t('publication.copyLink', { ns: 'stores' })}</Button>
+              <Button startIcon={<OpenInNewOutlinedIcon />} variant="outlined" component="a" href={`/${encodeURIComponent(store.slug)}`} target="_blank" rel="noreferrer" sx={{ minHeight: 48 }}>{t('publication.openPublic', { ns: 'stores' })}</Button>
             </>}
           </Stack>
-          {(source === 'platform' || editable) && <Button startIcon={<VisibilityOutlinedIcon />} variant="outlined" onClick={() => setPreviewing(true)} sx={{ alignSelf: 'flex-start', minHeight: 48 }}>Preview Store</Button>}
-          <StoreDetailsCard key={`${store.id}-${source}`} store={store} editable={editable} onSave={saveStore} onStoreUpdated={(updated) => { setStore(updated); onStoreUpdated(updated) }} />
+          {(source === 'platform' || editable) && <Button startIcon={<VisibilityOutlinedIcon />} variant="outlined" onClick={() => setPreviewingKey(requestKey)} sx={{ alignSelf: 'flex-start', minHeight: 48 }}>{t('details.preview', { ns: 'stores' })}</Button>}
+          <StoreDetailsCard key={`${store.id}-${source}`} store={store} editable={editable} onSave={saveStore} onStoreUpdated={(updated) => { setLoadState({ key: requestKey, store: updated, error: null }); onStoreUpdated(updated) }} />
           <Dialog open={transitionTarget !== null} onClose={() => { if (!transitioning) setTransitionTarget(null) }} aria-labelledby="publication-confirm-title">
-            <DialogTitle id="publication-confirm-title">{transitionTarget === 'publish' ? 'Publish this store?' : 'Unpublish this store?'}</DialogTitle>
+            <DialogTitle id="publication-confirm-title">{transitionTarget === 'publish' ? t('publication.confirmPublish', { ns: 'stores' }) : t('publication.confirmUnpublish', { ns: 'stores' })}</DialogTitle>
             <DialogContent>
-              <Typography>{transitionTarget === 'publish' ? 'Customers will be able to visit this store at its public link.' : 'Customers will no longer be able to visit this store. You can publish it again later.'}</Typography>
+              <Typography>{transitionTarget === 'publish' ? t('publication.publishHelp', { ns: 'stores' }) : t('publication.unpublishHelp', { ns: 'stores' })}</Typography>
             </DialogContent>
             <DialogActions sx={{ flexWrap: 'wrap', px: 3, pb: 2 }}>
-              <Button onClick={() => setTransitionTarget(null)} disabled={transitioning} sx={{ minHeight: 44 }}>Cancel</Button>
-              <Button onClick={() => void confirmPublication()} disabled={transitioning} variant="contained" sx={{ minHeight: 44 }}>{transitioning ? 'Updating…' : transitionTarget === 'publish' ? 'Publish Store' : 'Unpublish Store'}</Button>
+              <Button onClick={() => setTransitionTarget(null)} disabled={transitioning} sx={{ minHeight: 44 }}>{t('details.cancel', { ns: 'stores' })}</Button>
+              <Button onClick={() => void confirmPublication()} disabled={transitioning} variant="contained" sx={{ minHeight: 44 }}>{transitioning ? t('publication.updating', { ns: 'stores' }) : transitionTarget === 'publish' ? t('publication.publish', { ns: 'stores' }) : t('publication.unpublish', { ns: 'stores' })}</Button>
             </DialogActions>
           </Dialog>
         </>

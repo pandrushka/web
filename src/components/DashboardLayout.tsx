@@ -19,8 +19,9 @@ import {
 import { useId, useState } from 'react'
 import type { SelectChangeEvent } from '@mui/material/Select'
 import { useTheme } from '@mui/material/styles'
-import { dashboardRoleLabel, storeMembershipRoleLabel } from '../utils/roleLabels'
 import { TuPulperiaLogo } from './TuPulperiaLogo'
+import { useAppTranslation } from '../i18n/useAppTranslation'
+import { LanguageToggle } from '../i18n/LanguageToggle'
 
 export type DashboardContext = 'platform' | 'store' | 'employee' | 'customer'
 export type DashboardSection = 'dashboard' | 'invitations' | 'users' | 'platform_reports' | 'platform_settings' | 'products' | 'orders' | 'sales' | 'store_settings'
@@ -44,6 +45,7 @@ type DashboardLayoutProps = {
 }
 
 export function DashboardLayout({ email, role, context, storeRole, canSwitchContext, isPlatformAdmin, showPlatformCatalog = false, activeSection, onContextChange, onNavigate, onLogout, children }: DashboardLayoutProps) {
+  const { t } = useAppTranslation(['dashboard', 'common'])
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('md'))
   const [desktopCollapsed, setDesktopCollapsed] = useState(false)
@@ -51,42 +53,42 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
   const [mobileOpen, setMobileOpen] = useState(false)
   const [accountAnchor, setAccountAnchor] = useState<HTMLElement | null>(null)
   const accountMenuId = useId()
-  const identityRole = dashboardRoleLabel(role, context, storeRole)
-  const storeRoleLabel = storeMembershipRoleLabel(storeRole)
+  const storeRoleLabel = storeRole === 'owner' ? t('roles.owner') : storeRole === 'admin' ? t('roles.admin') : storeRole === 'employee' ? t('roles.employee') : null
+  const identityRole = context === 'platform' && isPlatformAdmin ? t('roles.superAdmin') : storeRoleLabel ?? (role === 'admin' ? t('roles.legacyAdmin') : t('roles.customer'))
   const pageTitle = activeSection === 'dashboard'
-    ? context === 'platform' ? 'Super Admin Dashboard' : context === 'store' ? `${storeRoleLabel ?? 'Store'} Dashboard` : context === 'employee' ? 'Employee Dashboard' : 'Customer Dashboard'
-    : activeSection === 'products' && context === 'platform' ? 'Products & Categories'
+    ? context === 'platform' ? t('titles.platform') : context === 'store' ? t('titles.store', { role: storeRoleLabel ?? t('roles.store') }) : context === 'employee' ? t('titles.employee') : t('titles.customer')
+    : activeSection === 'products' && context === 'platform' ? t('titles.productsCategories')
       : ({
-          invitations: 'Invitations',
-          users: 'Users',
-          platform_reports: 'Platform Reports',
-          platform_settings: 'Platform Settings',
-          products: 'Products',
-          orders: 'Orders',
-          sales: 'Sales',
-          store_settings: 'Store Settings',
-          dashboard: 'Dashboard',
+          invitations: t('titles.invitations'),
+          users: t('titles.users'),
+          platform_reports: t('titles.platformReports'),
+          platform_settings: t('titles.platformSettings'),
+          products: t('titles.products'),
+          orders: t('titles.orders'),
+          sales: t('titles.sales'),
+          store_settings: t('titles.storeSettings'),
+          dashboard: t('titles.dashboard'),
         } satisfies Record<DashboardSection, string>)[activeSection]
 
   const items: NavItem[] = [{
     id: 'dashboard',
-    label: context === 'platform' ? 'Super Admin Dashboard' : context === 'store' ? `${storeRoleLabel ?? 'Store'} Dashboard` : context === 'employee' ? 'Employee Dashboard' : 'Customer Dashboard',
+    label: context === 'platform' ? t('titles.platform') : context === 'store' ? t('titles.store', { role: storeRoleLabel ?? t('roles.store') }) : context === 'employee' ? t('titles.employee') : t('titles.customer'),
     icon: context === 'platform' ? <DashboardOutlinedIcon /> : <StorefrontOutlinedIcon />,
   }]
   if (context === 'platform' && isPlatformAdmin) {
     items.push(
-      { id: 'invitations', label: 'Invitations', icon: <ConfirmationNumberOutlinedIcon /> },
-      ...(showPlatformCatalog ? [{ id: 'products' as const, label: 'Products & Categories', icon: <Inventory2OutlinedIcon /> }] : []),
-      { id: 'users', label: 'Users', icon: <PeopleOutlineOutlinedIcon />, comingSoon: true },
-      { id: 'platform_reports', label: 'Platform Reports', icon: <AssessmentOutlinedIcon />, comingSoon: true },
-      { id: 'platform_settings', label: 'Platform Settings', icon: <SettingsOutlinedIcon />, comingSoon: true },
+      { id: 'invitations', label: t('titles.invitations'), icon: <ConfirmationNumberOutlinedIcon /> },
+      ...(showPlatformCatalog ? [{ id: 'products' as const, label: t('titles.productsCategories'), icon: <Inventory2OutlinedIcon /> }] : []),
+      { id: 'users', label: t('titles.users'), icon: <PeopleOutlineOutlinedIcon />, comingSoon: true },
+      { id: 'platform_reports', label: t('titles.platformReports'), icon: <AssessmentOutlinedIcon />, comingSoon: true },
+      { id: 'platform_settings', label: t('titles.platformSettings'), icon: <SettingsOutlinedIcon />, comingSoon: true },
     )
   } else if (context === 'store' && (storeRole === 'owner' || storeRole === 'admin')) {
     items.push(
-      { id: 'products', label: 'Products', icon: <Inventory2OutlinedIcon /> },
-      { id: 'orders', label: 'Orders', icon: <ShoppingBagOutlinedIcon />, comingSoon: true },
-      { id: 'sales', label: 'Sales', icon: <AssessmentOutlinedIcon />, comingSoon: true },
-      { id: 'store_settings', label: 'Store Settings', icon: <SettingsOutlinedIcon />, comingSoon: true },
+      { id: 'products', label: t('titles.products'), icon: <Inventory2OutlinedIcon /> },
+      { id: 'orders', label: t('titles.orders'), icon: <ShoppingBagOutlinedIcon />, comingSoon: true },
+      { id: 'sales', label: t('titles.sales'), icon: <AssessmentOutlinedIcon />, comingSoon: true },
+      { id: 'store_settings', label: t('titles.storeSettings'), icon: <SettingsOutlinedIcon />, comingSoon: true },
     )
   }
 
@@ -103,21 +105,21 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
   const sidebar = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: sidebarCollapsed ? 1 : 2 }}>
       <Box sx={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', px: sidebarCollapsed ? 0 : 1, py: 1.5 }}>
-        <ButtonBase aria-label="Go to dashboard" onClick={() => handleNavigate('dashboard')} sx={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', width: '100%', minHeight: 44, borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
+        <ButtonBase aria-label={t('nav.goDashboard')} onClick={() => handleNavigate('dashboard')} sx={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', width: '100%', minHeight: 44, borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
           <TuPulperiaLogo variant={sidebarCollapsed ? 'icon' : 'horizontal'} size={sidebarCollapsed ? 'medium' : 'small'} alt="" />
         </ButtonBase>
       </Box>
       <Divider />
       {canSwitchContext && (
         <FormControl fullWidth={!sidebarCollapsed} size="small" sx={{ my: 1, ...(sidebarCollapsed ? { width: 56, mx: 'auto' } : {}) }}>
-          <InputLabel id="dashboard-context-label" sx={sidebarCollapsed ? { position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 } : undefined}>Context</InputLabel>
-          <Select labelId="dashboard-context-label" id="dashboard-context" value={context} label="Context" onChange={handleContextChange} renderValue={(value) => sidebarCollapsed ? (value === 'platform' ? <DashboardOutlinedIcon fontSize="small" /> : <StorefrontOutlinedIcon fontSize="small" />) : undefined}>
-            {isPlatformAdmin && <MenuItem value="platform">Super Admin</MenuItem>}
+          <InputLabel id="dashboard-context-label" sx={sidebarCollapsed ? { position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 } : undefined}>{t('nav.context')}</InputLabel>
+          <Select labelId="dashboard-context-label" id="dashboard-context" value={context} label={t('nav.context')} onChange={handleContextChange} renderValue={(value) => sidebarCollapsed ? (value === 'platform' ? <DashboardOutlinedIcon fontSize="small" /> : <StorefrontOutlinedIcon fontSize="small" />) : undefined}>
+            {isPlatformAdmin && <MenuItem value="platform">{t('roles.superAdmin')}</MenuItem>}
             {storeRoleLabel && <MenuItem value={storeRole === 'employee' ? 'employee' : 'store'}>{storeRoleLabel}</MenuItem>}
           </Select>
         </FormControl>
       )}
-      <List id="dashboard-navigation" component="nav" aria-label="Main navigation" sx={{ display: 'grid', gap: 0.5, py: 2 }}>
+      <List id="dashboard-navigation" component="nav" aria-label={t('nav.main')} sx={{ display: 'grid', gap: 0.5, py: 2 }}>
         {items.map((item) => (
           <Tooltip key={item.id} title={sidebarCollapsed ? item.label : ''} placement="right">
             <span>
@@ -131,7 +133,7 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
               >
                 <ListItemIcon sx={{ minWidth: sidebarCollapsed ? 0 : 40, justifyContent: 'center', color: 'inherit' }}>{item.icon}</ListItemIcon>
                 {!sidebarCollapsed && <ListItemText primary={item.label} />}
-                {!sidebarCollapsed && item.comingSoon && <Chip size="small" label="Coming soon" variant="outlined" />}
+                {!sidebarCollapsed && item.comingSoon && <Chip size="small" label={t('common:states.comingSoon')} variant="outlined" />}
               </ListItemButton>
             </span>
           </Tooltip>
@@ -150,13 +152,13 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
       <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
         <AppBar position="sticky">
           <Toolbar sx={{ minHeight: { xs: 64, sm: 72 }, gap: 1.5 }}>
-            {!desktop && <IconButton edge="start" color="inherit" aria-label="Open navigation" aria-controls="dashboard-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)} sx={{ minWidth: 48, minHeight: 48 }}><MenuOutlinedIcon /></IconButton>}
+            {!desktop && <IconButton edge="start" color="inherit" aria-label={t('nav.open')} aria-controls="dashboard-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)} sx={{ minWidth: 48, minHeight: 48 }}><MenuOutlinedIcon /></IconButton>}
             {desktop ? (
-              <IconButton aria-label={desktopCollapsed ? 'Expand navigation' : 'Collapse navigation'} onClick={() => setDesktopCollapsed((collapsed) => !collapsed)} sx={{ minWidth: 44, minHeight: 44 }}>
+              <IconButton aria-label={desktopCollapsed ? t('nav.expand') : t('nav.collapse')} onClick={() => setDesktopCollapsed((collapsed) => !collapsed)} sx={{ minWidth: 44, minHeight: 44 }}>
                 {desktopCollapsed ? <ChevronRightOutlinedIcon /> : <ChevronLeftOutlinedIcon />}
               </IconButton>
             ) : (
-              <IconButton aria-label="Go to dashboard" onClick={() => handleNavigate('dashboard')} sx={{ minWidth: 48, minHeight: 48 }}>
+              <IconButton aria-label={t('nav.goDashboard')} onClick={() => handleNavigate('dashboard')} sx={{ minWidth: 48, minHeight: 48 }}>
                 <TuPulperiaLogo variant="icon" size="small" alt="" />
               </IconButton>
             )}
@@ -165,9 +167,10 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
               <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{email}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'none', letterSpacing: 0 }}>{identityRole}</Typography>
             </Box>}
+            <LanguageToggle />
             <IconButton
               color="inherit"
-              aria-label={`Open account menu for ${email}`}
+              aria-label={t('nav.openAccountFor', { email })}
               aria-controls={accountAnchor ? accountMenuId : undefined}
               aria-haspopup="menu"
               aria-expanded={Boolean(accountAnchor)}
@@ -176,7 +179,7 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
             >
               <Avatar sx={{ width: 36, height: 36, bgcolor: 'secondary.light', color: 'secondary.main' }}>{email.slice(0, 1).toUpperCase()}</Avatar>
             </IconButton>
-            <Menu id={accountMenuId} anchorEl={accountAnchor} open={Boolean(accountAnchor)} onClose={() => setAccountAnchor(null)} slotProps={{ list: { 'aria-label': 'Account options' } }}>
+            <Menu id={accountMenuId} anchorEl={accountAnchor} open={Boolean(accountAnchor)} onClose={() => setAccountAnchor(null)} slotProps={{ list: { 'aria-label': t('nav.account') } }}>
               <Box sx={{ px: 2, py: 1, maxWidth: 280 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{email}</Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'none', letterSpacing: 0 }}>{identityRole}</Typography>
@@ -184,7 +187,7 @@ export function DashboardLayout({ email, role, context, storeRole, canSwitchCont
               <Divider />
               <MenuItem onClick={() => { setAccountAnchor(null); onLogout() }} sx={{ minHeight: 48 }}>
                 <ListItemIcon><LogoutOutlinedIcon fontSize="small" /></ListItemIcon>
-                <ListItemText>Log out</ListItemText>
+                <ListItemText>{t('common:actions.logOut')}</ListItemText>
               </MenuItem>
             </Menu>
           </Toolbar>

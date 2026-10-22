@@ -154,10 +154,10 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/correo electrónico/i)
-    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
-    await user.type(screen.getByLabelText(/contraseña/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /^iniciar sesión$/i }))
+    await screen.findByLabelText(/email address/i)
+    await user.type(screen.getByLabelText(/email address/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
 
     await waitFor(() => expect(screen.getByText(/welcome to tu pulpería/i)).toBeInTheDocument())
     expect(screen.getByText(/store browsing and ordering/i)).toBeInTheDocument()
@@ -188,13 +188,13 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/correo electrónico/i)
-    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
-    await user.type(screen.getByLabelText(/contraseña/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /^iniciar sesión$/i }))
+    await screen.findByLabelText(/email address/i)
+    await user.type(screen.getByLabelText(/email address/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
 
-    await screen.findByText(/need to validate email/i)
-    await user.click(screen.getByRole('button', { name: /resend email/i }))
+    await screen.findByText(/need to verify your email/i)
+    await user.click(screen.getByRole('button', { name: /resend verification email/i }))
 
     await waitFor(() => expect(authApi.resendVerificationEmail).toHaveBeenCalledWith('andrey@example.com'))
     expect(window.localStorage.getItem('forme.auth.session')).toBeNull()
@@ -216,11 +216,11 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/correo electrónico/i)
-    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
-    await user.type(screen.getByLabelText(/contraseña/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /^iniciar sesión$/i }))
-    await screen.findByText(/need to validate email/i)
+    await screen.findByLabelText(/email address/i)
+    await user.type(screen.getByLabelText(/email address/i), 'andrey@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
+    await screen.findByText(/need to verify your email/i)
 
     window.dispatchEvent(
       new StorageEvent('storage', {
@@ -240,17 +240,17 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    await screen.findByLabelText(/correo electrónico/i)
-    await user.click(screen.getByRole('tab', { name: /crear cuenta/i }))
-    await user.type(screen.getByLabelText(/nombre/i), 'Ana')
-    await user.type(screen.getByLabelText(/apellido/i), 'López')
-    await user.type(screen.getByLabelText(/número de teléfono/i), '88881234')
-    await user.type(screen.getByLabelText(/correo electrónico/i), 'andrey@example.com')
-    await user.type(screen.getAllByLabelText(/contraseña/i)[0], 'password123')
-    await user.type(screen.getByLabelText(/confirmar contraseña/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /^crear cuenta$/i }))
+    await screen.findByLabelText(/email address/i)
+    await user.click(screen.getByRole('tab', { name: /create account/i }))
+    await user.type(screen.getByLabelText(/first name/i), 'Ana')
+    await user.type(screen.getByLabelText(/last name/i), 'López')
+    await user.type(screen.getByLabelText(/phone number/i), '88881234')
+    await user.type(screen.getByLabelText(/email address/i), 'andrey@example.com')
+    await user.type(screen.getAllByLabelText(/password/i)[0], 'password123')
+    await user.type(screen.getByLabelText(/confirm password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /^create account$/i }))
 
-    await screen.findByText(/need to validate email/i)
+    await screen.findByText(/need to verify your email/i)
     expect(authApi.register).toHaveBeenCalledWith('andrey@example.com', 'password123', null, {
       first_name: 'Ana', last_name: 'López', phone_number: '88881234',
     })
@@ -407,7 +407,7 @@ describe('App auth shell', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Employee dashboard' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Employee Dashboard' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Workplace Store' })).toBeInTheDocument()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /open account menu/i }))
@@ -473,7 +473,7 @@ describe('App auth shell', () => {
     await user.click(screen.getByRole('button', { name: /open navigation/i }))
     await user.click(screen.getByRole('button', { name: 'Products' }))
 
-    expect(await screen.findByRole('heading', { name: 'Products & categories' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Products & Categories' })).toBeInTheDocument()
     await waitFor(() => {
       expect(catalogApi.fetchCategories).toHaveBeenCalledWith('owner-access', 8, 'member')
       expect(catalogApi.fetchProducts).toHaveBeenCalledWith('owner-access', 8, 'member')

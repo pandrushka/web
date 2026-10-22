@@ -5,9 +5,10 @@ import { createStoreFromInvitation, validateStoreInvitation } from '../api/store
 import { TuPulperiaLogo } from './TuPulperiaLogo'
 import type { StoreAttributes, StoreCreationResponse } from '../api/stores'
 import type { User } from '../types/auth'
+import { useAppTranslation } from '../i18n/useAppTranslation'
+import { normalizeSlugInput, suggestSlug } from './storeOnboardingUtils'
 
 const draftKey = 'storeOnboardingDraft'
-const steps = ['Store identity', 'Contact information', 'Review']
 
 const emptyStore: StoreAttributes = {
   name: '',
@@ -28,28 +29,9 @@ type Props = {
   accessToken: string | null
 }
 
-function suggestSlug(name: string) {
-  return name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-}
-
-function normalizeSlugInput(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/-{2,}/g, '-')
-}
-
-function errorMessages(error: unknown) {
+function errorMessages(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message.split(', ').filter(Boolean)
-  return ['Could not complete the request. Please try again.']
+  return [fallback]
 }
 
 function readSavedDraft(): StoreDraft | null {
@@ -71,10 +53,10 @@ function readSavedDraft(): StoreDraft | null {
 }
 
 export function StoreOnboarding({ token, user, accessToken }: Props) {
-  const [invitationState, setInvitationState] = useState<'waiting' | 'loading' | 'valid' | 'invalid'>('waiting')
-  const [invitationError, setInvitationError] = useState('')
-  const [savedDraft, setSavedDraft] = useState<StoreDraft | null>(null)
-  const [showDraftPrompt, setShowDraftPrompt] = useState(false)
+  const { t } = useAppTranslation('onboarding')
+  const steps = [t('identity'), t('contact'), t('reviewStep')]
+  const [initialDraft] = useState(() => readSavedDraft())
+  const [showDraftPrompt, setShowDraftPrompt] = useState(() => Boolean(readSavedDraft()))
   const [draftActive, setDraftActive] = useState(false)
   const [store, setStore] = useState<StoreAttributes>(emptyStore)
   const [step, setStep] = useState(0)
@@ -84,12 +66,13 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
   const [slugError, setSlugError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [createdStore, setCreatedStore] = useState<StoreCreationResponse['store'] | null>(null)
+  const canValidateInvitation = Boolean(user && accessToken && user.email_verified_at)
+  const invitationKey = `${token}:${user?.id ?? ''}:${accessToken ?? ''}`
+  const [invitationResult, setInvitationResult] = useState<{ key: string; valid: boolean; error: string }>({ key: '', valid: false, error: '' })
+  const invitationState = !canValidateInvitation ? 'waiting' : invitationResult.key !== invitationKey ? 'loading' : invitationResult.valid ? 'valid' : 'invalid'
+  const invitationError = invitationResult.key === invitationKey ? invitationResult.error : ''
 
-  useEffect(() => {
-    const draft = readSavedDraft()
-    setSavedDraft(draft)
-    setShowDraftPrompt(Boolean(draft))
-  }, [])
+  const savedDraft = initialDraft
 
   useEffect(() => {
     if (!draftActive) return
@@ -101,32 +84,27 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
       city: store.city,
     }
     window.localStorage.setItem(draftKey, JSON.stringify(safeDraft))
-    setSavedDraft(safeDraft)
   }, [draftActive, store])
 
   useEffect(() => {
-    let cancelled = false
     if (!user || !accessToken || !user.email_verified_at) {
-      setInvitationState('waiting')
       return undefined
     }
 
-    setInvitationState('loading')
-    setInvitationError('')
+    let cancelled = false
     validateStoreInvitation(token, accessToken)
       .then(() => {
-        if (!cancelled) setInvitationState('valid')
+        if (!cancelled) setInvitationResult({ key: invitationKey, valid: true, error: '' })
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setInvitationState('invalid')
-        setInvitationError(errorMessages(error).join(', '))
+        setInvitationResult({ key: invitationKey, valid: false, error: errorMessages(error, t('requestError')).join(', ') })
       })
 
     return () => {
       cancelled = true
     }
-  }, [accessToken, token, user])
+  }, [accessToken, invitationKey, t, token, user])
 
   function update<K extends keyof StoreAttributes>(field: K, value: StoreAttributes[K]) {
     setDraftActive(true)
@@ -150,12 +128,10 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
     setLogoInitialEdited(Boolean(savedDraft.logo_initial))
     setShowDraftPrompt(false)
     setDraftActive(true)
-    setSavedDraft(null)
   }
 
   function startNewDraft() {
     window.localStorage.removeItem(draftKey)
-    setSavedDraft(null)
     setDraftActive(false)
     setShowDraftPrompt(false)
   }
@@ -163,11 +139,11 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
   function continueStep() {
     setErrors([])
     if (step === 0 && (!store.name.trim() || !store.slug.trim())) {
-      setErrors(['Store name and URL slug are required.'])
+      setErrors([t('nameSlugRequired')])
       return
     }
     if (step === 1 && !store.city.trim()) {
-      setErrors(['City is required.'])
+      setErrors([t('cityRequired')])
       return
     }
     setDraftActive(true)
@@ -183,10 +159,9 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
       const result = await createStoreFromInvitation(token, store, accessToken)
       setCreatedStore(result.store)
       window.localStorage.removeItem(draftKey)
-      setSavedDraft(null)
       setDraftActive(false)
     } catch (error) {
-      const messages = errorMessages(error)
+      const messages = errorMessages(error, t('requestError'))
       const slugValidation = messages.find((message) => /^slug\b/i.test(message) || /slug.*(reserved|taken|already)/i.test(message))
       if (slugValidation) setSlugError(slugValidation)
       setErrors(messages)
@@ -200,10 +175,10 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
     return (
       <Page>
         <Card><CardContent><Stack spacing={2}>
-          <Chip color="success" label="Store created · Draft" sx={{ alignSelf: 'flex-start' }} />
+          <Chip color="success" label={`${t('created')} · ${t('draftStatus')}`} sx={{ alignSelf: 'flex-start' }} />
           <Typography variant="h1">{createdStore.name}</Typography>
-          <Typography color="text.secondary">Store address preview: {window.location.origin}/{createdStore.slug}</Typography>
-          <Alert severity="info">Your store is a draft and is not publicly available yet.</Alert>
+          <Typography color="text.secondary">{t('storeAddress')}: {window.location.origin}/{createdStore.slug}</Typography>
+          <Alert severity="info">{t('notPublic')}</Alert>
         </Stack></CardContent></Card>
       </Page>
     )
@@ -213,31 +188,31 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
     <Page>
       <Stack spacing={2.5}>
         <Stack spacing={0.5}>
-          <Typography variant="overline" color="secondary.main">Invitation-based setup</Typography>
-          <Typography variant="h1">Set up your store</Typography>
-          <Typography color="text.secondary">Add your store details. You can review everything before creating it.</Typography>
+          <Typography variant="overline" color="secondary.main">{t('eyebrow')}</Typography>
+          <Typography variant="h1">{t('title')}</Typography>
+          <Typography color="text.secondary">{t('description')}</Typography>
         </Stack>
 
         {!user ? (
           <Card><CardContent><Stack spacing={2}>
-            <Alert severity="info">Sign in or create an account to check this invitation. Your invitation link stays in the address bar.</Alert>
+            <Alert severity="info">{t('signInToCheck')}</Alert>
           </Stack></CardContent></Card>
         ) : !user.email_verified_at ? (
-          <Alert severity="info">Verify your email first. If verification opens this page without the invitation, return to your original invitation link after verifying.</Alert>
+          <Alert severity="info">{t('verifyFirst')}</Alert>
         ) : invitationState === 'loading' ? (
-          <Card><CardContent><Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}><CircularProgress size={22} /><Typography>Checking invitation…</Typography></Stack></CardContent></Card>
+          <Card><CardContent><Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}><CircularProgress size={22} /><Typography>{t('checkingInvitation')}</Typography></Stack></CardContent></Card>
         ) : invitationState === 'invalid' ? (
-          <Alert severity="error">This invitation is invalid, expired, revoked, redeemed, or assigned to another email. {invitationError}</Alert>
+          <Alert severity="error">{t('invalid')}{invitationError && ` ${invitationError}`}</Alert>
         ) : invitationState === 'waiting' ? (
-          <Card><CardContent><Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}><CircularProgress size={22} /><Typography>Preparing invitation…</Typography></Stack></CardContent></Card>
+          <Card><CardContent><Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}><CircularProgress size={22} /><Typography>{t('preparingInvitation')}</Typography></Stack></CardContent></Card>
         ) : (
           <>
             {savedDraft && showDraftPrompt && step === 0 && (
               <Alert severity="info" action={<Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.5}>
-                <Button color="inherit" size="small" onClick={restoreDraft}>Restore saved details</Button>
-                <Button color="inherit" size="small" onClick={startNewDraft}>Start fresh</Button>
+                <Button color="inherit" size="small" onClick={restoreDraft}>{t('restoreDraft')}</Button>
+                <Button color="inherit" size="small" onClick={startNewDraft}>{t('startFresh')}</Button>
               </Stack>}>
-                Saved store details are available on this device. Restore them only if they belong to the store you want to set up with this invitation.
+                {t('draftPrompt')}
               </Alert>
             )}
             <Stepper activeStep={step} alternativeLabel>
@@ -247,36 +222,36 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
               <Stack spacing={2.5}>
                 {errors.length > 0 && <Alert severity="error">{errors.join(' ')}</Alert>}
                 {step === 0 && <>
-                  <Typography variant="h2">Store identity</Typography>
-                  <TextField label="Store name" value={store.name} onChange={(event) => update('name', event.target.value)} required fullWidth autoComplete="organization" />
-                  <TextField label="URL slug" value={store.slug} onChange={(event) => { setSlugEdited(true); update('slug', normalizeSlugInput(event.target.value)) }} onBlur={() => update('slug', suggestSlug(store.slug))} required fullWidth error={Boolean(slugError)} helperText={slugError || 'Used for your store address. You can edit the suggestion.'} slotProps={{ htmlInput: { autoCapitalize: 'none', spellCheck: false } }} />
-                  <TextField label="Logo initial" value={store.logo_initial} onChange={(event) => { setLogoInitialEdited(true); update('logo_initial', event.target.value.slice(0, 1).toLocaleUpperCase()) }} slotProps={{ htmlInput: { maxLength: 1 } }} helperText="One character shown as your store mark." />
-                  <TextField label="Description (optional)" value={store.description} onChange={(event) => update('description', event.target.value)} multiline minRows={3} fullWidth />
+                  <Typography variant="h2">{t('identity')}</Typography>
+                  <TextField label={t('storeName')} value={store.name} onChange={(event) => update('name', event.target.value)} required fullWidth autoComplete="organization" />
+                  <TextField label={t('slug')} value={store.slug} onChange={(event) => { setSlugEdited(true); update('slug', normalizeSlugInput(event.target.value)) }} onBlur={() => update('slug', suggestSlug(store.slug))} required fullWidth error={Boolean(slugError)} helperText={slugError || t('slugHelp')} slotProps={{ htmlInput: { autoCapitalize: 'none', spellCheck: false } }} />
+                  <TextField label={t('logoInitial')} value={store.logo_initial} onChange={(event) => { setLogoInitialEdited(true); update('logo_initial', event.target.value.slice(0, 1).toLocaleUpperCase()) }} slotProps={{ htmlInput: { maxLength: 1 } }} helperText={t('logoInitialHelp')} />
+                  <TextField label={t('descriptionField')} value={store.description} onChange={(event) => update('description', event.target.value)} multiline minRows={3} fullWidth />
                 </>}
                 {step === 1 && <>
-                  <Typography variant="h2">Contact information</Typography>
-                  <TextField label="City" value={store.city} onChange={(event) => update('city', event.target.value)} required fullWidth autoComplete="address-level2" />
-                  <TextField label="Phone or WhatsApp (optional)" value={store.phone_number} onChange={(event) => update('phone_number', event.target.value)} fullWidth type="tel" autoComplete="tel" helperText="Nicaraguan numbers are saved with the +505 country code." />
-                  <TextField label="Address (optional)" value={store.address} onChange={(event) => update('address', event.target.value)} fullWidth autoComplete="street-address" />
-                  <TextField label="Directions or landmark (optional)" value={store.directions} onChange={(event) => update('directions', event.target.value)} multiline minRows={2} fullWidth />
+                  <Typography variant="h2">{t('contact')}</Typography>
+                  <TextField label={t('city')} value={store.city} onChange={(event) => update('city', event.target.value)} required fullWidth autoComplete="address-level2" />
+                  <TextField label={t('phone')} value={store.phone_number} onChange={(event) => update('phone_number', event.target.value)} fullWidth type="tel" autoComplete="tel" helperText={t('phoneHelp')} />
+                  <TextField label={t('address')} value={store.address} onChange={(event) => update('address', event.target.value)} fullWidth autoComplete="street-address" />
+                  <TextField label={t('directions')} value={store.directions} onChange={(event) => update('directions', event.target.value)} multiline minRows={2} fullWidth />
                 </>}
                 {step === 2 && <>
-                  <Typography variant="h2">Review your store</Typography>
+                  <Typography variant="h2">{t('review')}</Typography>
                   <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.default' }}>
                     <Stack spacing={1}>
                       <Typography variant="h3">{store.logo_initial || store.name.trim().charAt(0).toLocaleUpperCase()} · {store.name}</Typography>
-                      <Typography color="text.secondary">Address preview: {window.location.origin}/{store.slug}</Typography>
+                      <Typography color="text.secondary">{t('storeAddress')}: {window.location.origin}/{store.slug}</Typography>
                       <Typography>{store.city}{store.address ? ` · ${store.address}` : ''}</Typography>
                       {store.description && <Typography>{store.description}</Typography>}
                       {store.phone_number && <Typography>{store.phone_number}</Typography>}
                       {store.directions && <Typography color="text.secondary">{store.directions}</Typography>}
                     </Stack>
                   </Box>
-                  <Alert severity="info">The store will be created as a draft and will not be publicly available yet.</Alert>
+                  <Alert severity="info">{t('draftNotice')}</Alert>
                 </>}
                 <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
-                  <Button variant="text" disabled={step === 0 || submitting} onClick={() => setStep((current) => current - 1)}>Back</Button>
-                  {step < 2 ? <Button variant="contained" onClick={continueStep}>Continue</Button> : <Button variant="contained" disabled={submitting} onClick={submit}>{submitting ? <CircularProgress size={22} color="inherit" /> : 'Create store'}</Button>}
+                  <Button variant="text" disabled={step === 0 || submitting} onClick={() => setStep((current) => current - 1)}>{t('back')}</Button>
+                  {step < 2 ? <Button variant="contained" onClick={continueStep}>{t('continue')}</Button> : <Button variant="contained" disabled={submitting} onClick={submit}>{submitting ? <CircularProgress size={22} color="inherit" /> : t('create')}</Button>}
                 </Stack>
               </Stack>
             </CardContent></Card>
@@ -290,5 +265,3 @@ export function StoreOnboarding({ token, user, accessToken }: Props) {
 function Page({ children }: { children: ReactNode }) {
   return <Box sx={{ minHeight: '100svh', bgcolor: 'background.default', py: { xs: 3, sm: 5 } }}><Container maxWidth="sm"><Box sx={{ mb: { xs: 3, sm: 4 } }}><TuPulperiaLogo variant="horizontal" size="small" /></Box>{children}</Container></Box>
 }
-
-export { suggestSlug }

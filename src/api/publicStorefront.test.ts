@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fetchPublicCategories, fetchPublicProductImage, fetchPublicProducts, fetchPublicStore } from './publicStorefront'
+import i18n from '../i18n'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await i18n.changeLanguage('es')
+})
 
 describe('public storefront API', () => {
   it('uses anonymous public endpoints and the Rails response paths', async () => {
+    await i18n.changeLanguage('es')
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ store: { name: 'Pulpería Estrada' } }), blob: async () => new Blob(['image']) })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -19,8 +24,20 @@ describe('public storefront API', () => {
       'http://localhost:3000/api/v1/public/stores/pulperia-estrada/products?page=2&per_page=24',
       'http://localhost:3000/api/v1/public/stores/pulperia-estrada/products/4/image',
     ])
-    expect(fetchMock.mock.calls.every(([, init]) => init === undefined)).toBe(true)
-    expect(fetchMock.mock.calls.map(([, init]) => init?.headers)).toEqual([undefined, undefined, undefined, undefined])
+    expect(fetchMock.mock.calls.map(([, init]) => init?.headers)).toEqual(Array(4).fill({ 'Accept-Language': 'es' }))
+    expect(fetchMock.mock.calls.every(([, init]) => !('Authorization' in (init?.headers ?? {})))).toBe(true)
+  })
+
+  it('uses the current English language for public data and image requests', async () => {
+    await i18n.changeLanguage('en')
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}), blob: async () => new Blob(['image']) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchPublicStore('language-check')
+    await fetchPublicProductImage('/api/v1/public/stores/language-check/products/1/image')
+
+    expect(fetchMock.mock.calls.map(([, init]) => init.headers['Accept-Language'])).toEqual(['en', 'en'])
+    expect(fetchMock.mock.calls.every(([, init]) => !('Authorization' in init.headers))).toBe(true)
   })
 
   it('preserves the API status for customer-friendly not-found handling', async () => {

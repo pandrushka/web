@@ -33,7 +33,7 @@ function loadTurnstileScript() {
 
       if (existingScript) {
         existingScript.addEventListener('load', () => resolve(), { once: true })
-        existingScript.addEventListener('error', () => reject(new Error('Could not load Turnstile')), { once: true })
+        existingScript.addEventListener('error', () => reject(new Error('Turnstile script failed to load')), { once: true })
         return
       }
 
@@ -43,7 +43,7 @@ function loadTurnstileScript() {
       script.defer = true
       script.dataset.turnstileScript = 'true'
       script.onload = () => resolve()
-      script.onerror = () => reject(new Error('Could not load Turnstile'))
+      script.onerror = () => reject(new Error('Turnstile script failed to load'))
       document.head.appendChild(script)
     })
   }

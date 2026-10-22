@@ -1,6 +1,8 @@
 import { apiBaseUrl, apiRequest, authorizationHeaders } from './client'
 import { BoundedPromiseCache } from './boundedPromiseCache'
 import type { CatalogProduct } from './catalog'
+import { getApiLanguage } from '../i18n/apiLanguage'
+import i18n from '../i18n'
 
 export type ImageTokenRefresh = (expiredAccessToken: string) => Promise<string>
 
@@ -12,14 +14,15 @@ function imageCacheKey(cacheScope: string, path: string) {
 }
 
 async function requestImageBlob(path: string, accessToken: string, refreshAccessToken?: ImageTokenRefresh) {
-  let response = await fetch(`${apiBaseUrl}${path}`, { headers: authorizationHeaders(accessToken) })
+  const requestHeaders = (token: string) => ({ ...authorizationHeaders(token), 'Accept-Language': getApiLanguage() })
+  let response = await fetch(`${apiBaseUrl}${path}`, { headers: requestHeaders(accessToken) })
   if (response.status === 401 && refreshAccessToken) {
     const refreshedToken = await refreshAccessToken(accessToken)
-    response = await fetch(`${apiBaseUrl}${path}`, { headers: authorizationHeaders(refreshedToken) })
+    response = await fetch(`${apiBaseUrl}${path}`, { headers: requestHeaders(refreshedToken) })
   }
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({})) as { error?: string; errors?: string[] }
-    throw new Error(errorBody.error ?? errorBody.errors?.join(', ') ?? `Image request failed with ${response.status}`)
+    throw new Error(errorBody.error ?? errorBody.errors?.join(', ') ?? i18n.t('errors.requestFailed', { ns: 'common', status: response.status }))
   }
   return response.blob()
 }

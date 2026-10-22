@@ -30,9 +30,7 @@ export function FlipCard({
   const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   const faceRefs = useRef<{ front: HTMLDivElement | null; back: HTMLDivElement | null }>({ front: null, back: null })
   const previousFlipped = useRef(flipped)
-  const waitingForHeightTransition = useRef(false)
   const [faceHeights, setFaceHeights] = useState({ front: 0, back: 0 })
-  const [lockedHeight, setLockedHeight] = useState<number | null>(null)
   const measureFace = useCallback((face: 'front' | 'back') => {
     const element = faceRefs.current[face]
     if (!element) return
@@ -62,19 +60,13 @@ export function FlipCard({
       observer.disconnect()
       window.removeEventListener('resize', measureAll)
     }
-  }, [front, back, measureAll])
+  }, [front, back, measureAll, measureFace])
 
   useLayoutEffect(() => {
     if (previousFlipped.current === flipped) return
     previousFlipped.current = flipped
-    if (reduceMotion || duration <= 0) {
-      setLockedHeight(null)
-      onFlipAnimationEnd?.()
-      return
-    }
-    const maxHeight = Math.max(faceHeights.front, faceHeights.back)
-    setLockedHeight(maxHeight > 0 ? maxHeight : null)
-  }, [duration, faceHeights.back, faceHeights.front, flipped, onFlipAnimationEnd, reduceMotion])
+    if (reduceMotion || duration <= 0) onFlipAnimationEnd?.()
+  }, [duration, flipped, onFlipAnimationEnd, reduceMotion])
 
   const faceSx = {
     gridArea: '1 / 1',
@@ -93,16 +85,11 @@ export function FlipCard({
     >
       <Box
         data-testid="flip-card-sizer"
-        onTransitionEnd={(event) => {
-          if (event.target !== event.currentTarget || event.propertyName !== 'height' || !waitingForHeightTransition.current) return
-          waitingForHeightTransition.current = false
-          onFlipAnimationEnd?.()
-        }}
         sx={{
           width: '100%',
-          height: (lockedHeight ?? faceHeights[flipped ? 'back' : 'front']) || 'auto',
+          height: faceHeights[flipped ? 'back' : 'front'] || 'auto',
           overflow: 'hidden',
-          transition: lockedHeight === null && !reduceMotion ? 'height 180ms ease' : 'none',
+          transition: !reduceMotion ? `height ${Math.min(Math.max(duration, 0), 180)}ms ease` : 'none',
           '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
@@ -110,10 +97,7 @@ export function FlipCard({
         data-testid="flip-card-rotator"
         onTransitionEnd={(event) => {
           if (event.target !== event.currentTarget || event.propertyName !== 'transform') return
-          const targetHeight = faceHeights[flipped ? 'back' : 'front']
-          waitingForHeightTransition.current = !reduceMotion && lockedHeight !== null && targetHeight !== lockedHeight
-          setLockedHeight(null)
-          if (!waitingForHeightTransition.current) onFlipAnimationEnd?.()
+          onFlipAnimationEnd?.()
         }}
         sx={{
           display: 'grid',

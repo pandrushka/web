@@ -121,7 +121,7 @@ describe('StoreOnboarding', () => {
 
     finishRequest?.({ store: { id: 7, name: 'Café Central', slug: 'cafe-central-uno', status: 'draft' }, membership: { id: 8, role: 'owner' } })
     expect(await screen.findByText('Café Central')).toBeInTheDocument()
-    expect(screen.getByText(/draft and is not publicly available yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/Your store is not publicly available yet/i)).toBeInTheDocument()
     expect(screen.getByText(/\/cafe-central-uno/)).toBeInTheDocument()
     expect(window.localStorage.getItem('storeOnboardingDraft')).toBeNull()
   })

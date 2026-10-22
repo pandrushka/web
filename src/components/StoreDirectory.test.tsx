@@ -36,7 +36,7 @@ describe('StoreDirectory', () => {
     expect(screen.getByRole('progressbar', { name: /loading stores/i })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'La Esquina' })).toBeInTheDocument()
     expect(screen.getByText('León')).toBeInTheDocument()
-    expect(screen.getByText('draft')).toBeInTheDocument()
+    expect(screen.getByText('Draft')).toBeInTheDocument()
     expect(screen.getByText('Store Owner')).toBeInTheDocument()
     expect(fetchMyStores).toHaveBeenCalledWith('access-token')
     await waitFor(() => expect(onLoaded).toHaveBeenCalledWith([store]))

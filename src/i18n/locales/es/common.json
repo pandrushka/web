@@ -1,0 +1,37 @@
+{
+  "language": {
+    "label": "Idioma",
+    "spanish": "Español",
+    "english": "English"
+  },
+  "actions": {
+    "retry": "Reintentar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "back": "Volver",
+    "edit": "Editar",
+    "remove": "Eliminar",
+    "confirm": "Confirmar",
+    "loading": "Cargando…",
+    "logOut": "Cerrar sesión",
+    "copy": "Copiar",
+    "search": "Buscar"
+  },
+  "states": {
+    "available": "Disponible",
+    "unavailable": "No disponible",
+    "archived": "Archivado",
+    "active": "Activo",
+    "draft": "Borrador",
+    "suspended": "Suspendido",
+    "comingSoon": "Próximamente",
+    "notProvided": "No disponible"
+  },
+  "errors": {
+    "generic": "No se pudo completar la solicitud.",
+    "load": "No se pudo cargar la información.",
+    "requestFailed": "La solicitud falló con el estado {{status}}.",
+    "sessionExpired": "Tu sesión venció. Inicia sesión nuevamente para ver esta imagen."
+  }
+}

@@ -5,13 +5,13 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { AuthCard } from './AuthCard'
 import type { AuthMode } from '../types/auth'
+import i18n from '../i18n'
 
 function CustomerAuthCard({ onSubmit = vi.fn() }: { onSubmit?: (event: FormEvent<HTMLFormElement>) => void }) {
   const [mode, setMode] = useState<AuthMode>('login')
   const [profile, setProfile] = useState({ first_name: '', last_name: '', phone_number: '' })
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [locale, setLocale] = useState<'es' | 'en'>('es')
 
   return <AuthCard
     mode={mode}
@@ -28,8 +28,6 @@ function CustomerAuthCard({ onSubmit = vi.fn() }: { onSubmit?: (event: FormEvent
     onTurnstileTokenChange={vi.fn()}
     onSubmit={onSubmit}
     customerExperience
-    locale={locale}
-    onLocaleChange={setLocale}
     registrationProfile={profile}
     onRegistrationProfileChange={setProfile}
   />
@@ -37,6 +35,7 @@ function CustomerAuthCard({ onSubmit = vi.fn() }: { onSubmit?: (event: FormEvent
 
 describe('customer authentication card', () => {
   it('shows accessible sign-in and registration tabs and switches to the customer registration fields', async () => {
+    await i18n.changeLanguage('es')
     const user = userEvent.setup()
     render(<CustomerAuthCard />)
 
@@ -55,6 +54,7 @@ describe('customer authentication card', () => {
   })
 
   it('supports English translation and validates password confirmation before submission', async () => {
+    await i18n.changeLanguage('es')
     const onSubmit = vi.fn()
     const user = userEvent.setup()
     render(<CustomerAuthCard onSubmit={onSubmit} />)
