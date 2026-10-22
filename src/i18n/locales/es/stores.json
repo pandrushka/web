@@ -13,6 +13,16 @@
     "previous": "Anterior",
     "next": "Siguiente"
   },
+  "publicDirectory": {
+    "title": "Descubre tiendas de tu comunidad",
+    "browseStores": "Explorar tiendas",
+    "description": "Explora tiendas y productos de negocios locales.",
+    "search": "Buscar tiendas o ciudades",
+    "city": "Filtrar por ciudad",
+    "empty": "No hay tiendas que coincidan con la búsqueda.",
+    "openStore": "Visitar {{name}}",
+    "pagination": "Página {{page}} de {{pages}} · {{count}} tiendas"
+  },
   "details": {
     "title": "Detalles de la tienda",
     "loading": "Cargando detalles de la tienda…",

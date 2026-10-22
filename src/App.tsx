@@ -13,7 +13,7 @@ import { authSessionKey, clearAuthSession, loadAuthSession, saveAuthSession } fr
 import { isPlatformAdmin } from './utils/auth'
 import type { ImageTokenRefresh } from './api/productImages'
 import { clearProductImageCache } from './api/productImages'
-import { publicStoreSlugFromPath } from './utils/appRoutes'
+import { isPublicStoreDirectoryPath, publicProductRouteFromPath, publicStoreSlugFromPath } from './utils/appRoutes'
 import i18n from './i18n'
 
 const AuthCard = lazy(() => import('./components/AuthCard').then(({ AuthCard: component }) => ({ default: component })))
@@ -24,6 +24,8 @@ const StoreDetailsPanel = lazy(() => import('./components/StoreDetailsPanel').th
 const StoreInvitations = lazy(() => import('./components/StoreInvitations').then(({ StoreInvitations: component }) => ({ default: component })))
 const StoreCatalogManagement = lazy(() => import('./features/catalog/StoreCatalogManagement').then(({ StoreCatalogManagement: component }) => ({ default: component })))
 const PublicStorefrontRoute = lazy(() => import('./features/storefront/PublicStorefrontRoute').then(({ PublicStorefrontRoute: component }) => ({ default: component })))
+const PublicProductDetailRoute = lazy(() => import('./features/storefront/PublicProductDetailRoute').then(({ PublicProductDetailRoute: component }) => ({ default: component })))
+const PublicStoreDirectoryRoute = lazy(() => import('./features/storefront/PublicStoreDirectoryRoute').then(({ PublicStoreDirectoryRoute: component }) => ({ default: component })))
 
 function ScreenLoading() {
   const { t } = useAppTranslation('common')
@@ -64,7 +66,9 @@ function App() {
   const invitationToken = readInvitationToken(window.location.pathname)
   const isInvitationRoute = invitationToken !== null
   const hasEmailVerificationToken = new URLSearchParams(window.location.search).has('email_verification_token')
-  const publicStoreSlug = hasEmailVerificationToken ? null : publicStoreSlugFromPath(window.location.pathname)
+  const publicProductRoute = hasEmailVerificationToken ? null : publicProductRouteFromPath(window.location.pathname)
+  const isPublicStoreDirectory = !hasEmailVerificationToken && isPublicStoreDirectoryPath(window.location.pathname)
+  const publicStoreSlug = hasEmailVerificationToken || publicProductRoute || isPublicStoreDirectory ? null : publicStoreSlugFromPath(window.location.pathname)
   const isRegister = mode === 'register'
   const isAdmin = Boolean(user && isPlatformAdmin(user))
   const ownerStore = myStores.find((store) => store.membership?.role === 'owner')
@@ -318,6 +322,8 @@ function App() {
     clearAuthSession()
   }
 
+  if (publicProductRoute) return <Suspense fallback={<ScreenLoading />}><PublicProductDetailRoute slug={publicProductRoute.slug} productId={publicProductRoute.productId} /></Suspense>
+  if (isPublicStoreDirectory) return <Suspense fallback={<ScreenLoading />}><PublicStoreDirectoryRoute /></Suspense>
   if (publicStoreSlug) return <Suspense fallback={<ScreenLoading />}><PublicStorefrontRoute slug={publicStoreSlug} /></Suspense>
 
   if (bootstrapping) {

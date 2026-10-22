@@ -13,6 +13,16 @@
     "previous": "Previous",
     "next": "Next"
   },
+  "publicDirectory": {
+    "title": "Discover neighborhood stores",
+    "browseStores": "Browse stores",
+    "description": "Explore stores and products from local businesses.",
+    "search": "Search stores or cities",
+    "city": "Filter by city",
+    "empty": "No stores match your search.",
+    "openStore": "Visit {{name}}",
+    "pagination": "Page {{page}} of {{pages}} · {{count}} stores"
+  },
   "details": {
     "title": "Store details",
     "loading": "Loading store details…",

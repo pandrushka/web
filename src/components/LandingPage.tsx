@@ -1,9 +1,9 @@
-import { Box, Stack, Typography } from '@mui/material'
+import { Box, Button, Stack, Typography } from '@mui/material'
 import { TuPulperiaLogo } from './TuPulperiaLogo'
 import { useAppTranslation } from '../i18n/useAppTranslation'
 
 export function LandingPage() {
-  const { t, i18n } = useAppTranslation('auth')
+  const { t, i18n } = useAppTranslation(['auth', 'stores'])
   return (
     <Box
       lang={i18n.resolvedLanguage}
@@ -23,6 +23,9 @@ export function LandingPage() {
           <Typography color="text.secondary" sx={{ fontSize: { xs: 16, md: 18 }, maxWidth: 560 }}>
             {t('introduction')}
           </Typography>
+          <Button component="a" href="/stores" variant="outlined" sx={{ mt: 1, minHeight: 44 }}>
+            {t('publicDirectory.browseStores', { ns: 'stores' })}
+          </Button>
         </Stack>
       </Stack>
     </Box>
