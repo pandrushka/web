@@ -172,4 +172,33 @@ describe('DashboardLayout', () => {
     expect(logo).toHaveAttribute('src', '/branding/tu-pulperia-logo-light.png')
     Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia })
   })
+
+  it('keeps long Spanish navigation labels and Coming Soon markers inside the sidebar', async () => {
+    const user = userEvent.setup()
+    render(<DashboardLayout email="owner@example.com" role="member" context="store" storeRole="owner" canSwitchContext={false} isPlatformAdmin={false} activeSection="dashboard" onContextChange={vi.fn()} onNavigate={vi.fn()} onLogout={vi.fn()}><div>Page</div></DashboardLayout>)
+
+    await user.click(screen.getByRole('button', { name: 'Español' }))
+    await user.click(screen.getByRole('button', { name: /abrir navegación/i }))
+
+    const longLabel = 'Panel de Propietario de tienda'
+    const dashboardItem = screen.getByRole('button', { name: longLabel })
+    expect(dashboardItem).toHaveAttribute('aria-label', longLabel)
+    expect(dashboardItem).toHaveStyle({ width: '100%', minWidth: '0px', boxSizing: 'border-box', overflow: 'hidden' })
+    expect(within(dashboardItem).getByText(longLabel)).toHaveStyle({ WebkitLineClamp: '2', overflow: 'hidden' })
+
+    const futureItem = screen.getByRole('button', { name: 'Configuración de tienda Próximamente' })
+    expect(futureItem).toHaveAttribute('aria-disabled', 'true')
+    expect(within(futureItem).getByText('Próximamente')).toBeInTheDocument()
+    expect(futureItem.querySelector('.MuiChip-root')).toBeInTheDocument()
+  })
+
+  it('uses the same responsive height for the sidebar brand divider and top header', () => {
+    const { container } = render(<DashboardLayout email="owner@example.com" role="member" context="store" storeRole="owner" canSwitchContext={false} isPlatformAdmin={false} activeSection="dashboard" onContextChange={vi.fn()} onNavigate={vi.fn()} onLogout={vi.fn()}><div>Page</div></DashboardLayout>)
+    const brandHeader = screen.getByTestId('dashboard-sidebar-brand')
+    const toolbar = container.querySelector('.MuiToolbar-root')
+
+    expect(brandHeader.nextElementSibling).toHaveClass('MuiDivider-root')
+    expect(toolbar).not.toBeNull()
+    expect(window.getComputedStyle(brandHeader).height).toBe(window.getComputedStyle(toolbar!).height)
+  })
 })
