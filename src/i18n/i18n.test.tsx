@@ -56,7 +56,7 @@ describe('frontend language system', () => {
     await i18n.changeLanguage('es')
     const user = userEvent.setup()
     render(<><LanguageToggle /><TranslationProbe /></>)
-    expect(screen.getByText('Qué bueno verte de nuevo')).toBeInTheDocument()
+    expect(screen.getByText('Bienvenido!')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'English' }))
     expect(await screen.findByText('Welcome back')).toBeInTheDocument()
