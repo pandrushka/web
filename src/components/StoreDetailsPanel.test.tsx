@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiRequestError } from '../api/client'
 import type { StoreProfile } from '../api/stores'
 import { fetchAdminStore, fetchStore, publishStore, unpublishStore, updateStore } from '../api/stores'
 import { fetchCategories, fetchProducts } from '../api/catalog'
@@ -24,6 +25,12 @@ const store: StoreProfile = {
 }
 
 describe('StoreDetailsPanel', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    vi.mocked(fetchCategories).mockResolvedValue({ categories: [] })
+    vi.mocked(fetchProducts).mockResolvedValue({ products: [] })
+  })
+
   it('loads member details, submits only editable fields, and shows the updated response', async () => {
     const updated: StoreProfile = { ...store, name: 'Pulpería Nueva', city: 'Managua' }
     vi.mocked(fetchStore).mockResolvedValue({ store })
@@ -138,6 +145,101 @@ describe('StoreDetailsPanel', () => {
     expect(screen.getByRole('link', { name: 'Open Public Store' })).toHaveAttribute('href', '/pulperia-centro')
   })
 
+  it('uses the authoritative Rails response after unpublishing', async () => {
+    const activeStore = { ...store, status: 'active' as const }
+    const draftStore = { ...store, status: 'draft' as const }
+    vi.mocked(fetchStore).mockResolvedValue({ store: activeStore })
+    vi.mocked(unpublishStore).mockResolvedValue({ store: draftStore })
+    const onStoreUpdated = vi.fn()
+    render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={onStoreUpdated} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Unpublish Store' }))
+    fireEvent.click(screen.getByRole('dialog').querySelector('button:last-child')!)
+
+    expect(await screen.findByText('Store unpublished.')).toBeInTheDocument()
+    expect(onStoreUpdated).toHaveBeenLastCalledWith(draftStore)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Publish Store' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open Public Store' })).not.toBeInTheDocument()
+  })
+
+  it('refreshes the authoritative store after a 409 and updates publication actions', async () => {
+    const activeStore = { ...store, status: 'active' as const }
+    vi.mocked(fetchStore)
+      .mockResolvedValueOnce({ store })
+      .mockResolvedValueOnce({ store: activeStore })
+    vi.mocked(publishStore).mockRejectedValue(new ApiRequestError('La tienda no puede cambiar de active a active', 409))
+    const onStoreUpdated = vi.fn()
+    render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={onStoreUpdated} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish Store' }))
+    fireEvent.click(screen.getByRole('dialog').querySelector('button:last-child')!)
+
+    expect(await screen.findByText('La tienda no puede cambiar de active a active')).toBeInTheDocument()
+    expect(fetchStore).toHaveBeenNthCalledWith(2, 'owner-token', 5)
+    expect(onStoreUpdated).toHaveBeenLastCalledWith(activeStore)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Unpublish Store' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Public Store' })).toBeInTheDocument()
+    expect(screen.queryByText('Store published.')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Spanish', 'La tienda no puede cambiar de active a active'],
+    ['English', 'Store cannot transition from active to active'],
+  ])('preserves the localized %s conflict if refreshing status also fails', async (_language, conflictMessage) => {
+    vi.mocked(fetchStore).mockResolvedValueOnce({ store }).mockRejectedValueOnce(new Error('Network unavailable'))
+    vi.mocked(publishStore).mockRejectedValue(new ApiRequestError(conflictMessage, 409))
+    render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish Store' }))
+    fireEvent.click(screen.getByRole('dialog').querySelector('button:last-child')!)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(conflictMessage)
+    expect(alert).toHaveTextContent('The current store status could not be refreshed.')
+    expect(screen.queryByText('Store published.')).not.toBeInTheDocument()
+  })
+
+  it('prevents duplicate publication requests while a request is pending', async () => {
+    let resolvePublish: ((value: { store: StoreProfile }) => void) | undefined
+    vi.mocked(fetchStore).mockResolvedValue({ store })
+    vi.mocked(publishStore).mockImplementation(() => new Promise((resolve) => { resolvePublish = resolve }))
+    render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish Store' }))
+    const publishButton = screen.getByRole('dialog').querySelector('button:last-child')!
+    fireEvent.click(publishButton)
+    fireEvent.click(publishButton)
+    await waitFor(() => expect(publishStore).toHaveBeenCalledTimes(1))
+    expect(publishButton).toBeDisabled()
+
+    await act(async () => resolvePublish?.({ store: { ...store, status: 'active' } }))
+    expect(await screen.findByText('Store published.')).toBeInTheDocument()
+  })
+
+  it('ignores a publication response after the selected store or account changes', async () => {
+    let resolvePublish: ((value: { store: StoreProfile }) => void) | undefined
+    const otherStore = { ...store, id: 6, name: 'Pulpería Norte', slug: 'pulperia-norte' }
+    vi.mocked(fetchStore).mockResolvedValueOnce({ store }).mockResolvedValueOnce({ store: otherStore })
+    vi.mocked(publishStore).mockImplementation(() => new Promise((resolve) => { resolvePublish = resolve }))
+    const onStoreUpdated = vi.fn()
+    const { rerender } = render(<StoreDetailsPanel storeId={5} accessToken="owner-token" source="member" editable onStoreUpdated={onStoreUpdated} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish Store' }))
+    fireEvent.click(screen.getByRole('dialog').querySelector('button:last-child')!)
+    await waitFor(() => expect(publishStore).toHaveBeenCalledOnce())
+
+    rerender(<StoreDetailsPanel storeId={6} accessToken="other-account-token" source="member" editable onStoreUpdated={onStoreUpdated} />)
+    expect(await screen.findByRole('heading', { name: otherStore.name })).toBeInTheDocument()
+    onStoreUpdated.mockClear()
+
+    await act(async () => resolvePublish?.({ store: { ...store, status: 'active' } }))
+    expect(screen.getByRole('heading', { name: otherStore.name })).toBeInTheDocument()
+    expect(onStoreUpdated).not.toHaveBeenCalled()
+    expect(screen.queryByText('Store published.')).not.toBeInTheDocument()
+  })
+
   it('does not show publication actions to admins or platform-only users', async () => {
     vi.mocked(fetchStore).mockResolvedValue({ store: { ...store, membership: { role: 'admin' } } })
     const { rerender } = render(<StoreDetailsPanel storeId={5} accessToken="admin-token" source="member" editable onStoreUpdated={vi.fn()} />)
@@ -148,6 +250,12 @@ describe('StoreDetailsPanel', () => {
     rerender(<StoreDetailsPanel storeId={5} accessToken="platform-token" source="platform" editable={false} onStoreUpdated={vi.fn()} />)
     expect(await screen.findByRole('heading', { name: store.name })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish Store' })).not.toBeInTheDocument()
+
+    vi.mocked(fetchStore).mockResolvedValue({ store: { ...store, membership: { role: 'employee' } } })
+    rerender(<StoreDetailsPanel storeId={5} accessToken="employee-token" source="member" editable onStoreUpdated={vi.fn()} />)
+    expect(await screen.findByRole('heading', { name: store.name })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Publish Store' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Unpublish Store' })).not.toBeInTheDocument()
   })
 
   it('allows dual-role owners to publish through member endpoints while viewing platform data', async () => {

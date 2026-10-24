@@ -62,6 +62,7 @@
     "published": "Tienda publicada.",
     "unpublished": "Tienda despublicada.",
     "error": "No se pudo actualizar el estado de publicación.",
+    "refreshFailed": "No se pudo actualizar el estado actual de la tienda.",
     "copied": "Enlace de la tienda copiado.",
     "copyError": "No se pudo copiar el enlace. Cópialo desde la barra de direcciones.",
     "copyLink": "Copiar enlace de la tienda",

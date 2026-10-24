@@ -62,6 +62,7 @@
     "published": "Store published.",
     "unpublished": "Store unpublished.",
     "error": "Could not update publication status.",
+    "refreshFailed": "The current store status could not be refreshed.",
     "copied": "Store link copied.",
     "copyError": "Could not copy the store link. Please copy it from your browser address bar.",
     "copyLink": "Copy Store Link",

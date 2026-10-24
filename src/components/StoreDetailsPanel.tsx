@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
 import { fetchAdminStore, fetchStore, publishStore, unpublishStore, updateStore } from '../api/stores'
 import type { StoreMembershipRole, StoreProfile } from '../api/stores'
+import { ApiRequestError } from '../api/client'
 import { StoreDetailsCard } from './StoreDetailsCard'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined'
@@ -34,9 +35,17 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
   const [loadState, setLoadState] = useState<{ key: string; store: StoreProfile | null; error: string | null }>({ key: '', store: null, error: null })
   const [attempt, setAttempt] = useState(0)
   const [previewingKey, setPreviewingKey] = useState<string | null>(null)
-  const [transitionTarget, setTransitionTarget] = useState<'publish' | 'unpublish' | null>(null)
-  const [transitioning, setTransitioning] = useState(false)
-  const [publicationMessage, setPublicationMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [transitionSelection, setTransitionSelection] = useState<{ scope: string; target: 'publish' | 'unpublish' } | null>(null)
+  const [transitionState, setTransitionState] = useState<{ scope: string; id: number } | null>(null)
+  const [publicationMessageState, setPublicationMessageState] = useState<{ scope: string; type: 'success' | 'error'; text: string; refreshError?: string } | null>(null)
+  const publicationScope = `${source}:${storeId}:${cacheScope ?? accessToken}`
+  const transitionTarget = transitionSelection?.scope === publicationScope ? transitionSelection.target : null
+  const transitioning = transitionState?.scope === publicationScope
+  const publicationMessage = publicationMessageState?.scope === publicationScope ? publicationMessageState : null
+  if (transitionState && transitionState.scope !== publicationScope) setTransitionState(null)
+  const activePublicationScopeRef = useRef(publicationScope)
+  const pendingPublicationRef = useRef<{ scope: string; id: number } | null>(null)
+  const publicationSequenceRef = useRef(0)
   const onStoreUpdatedRef = useRef(onStoreUpdated)
   const requestKey = `${source}:${storeId}:${accessToken}:${attempt}`
   const currentLoad = loadState.key === requestKey ? loadState : null
@@ -46,6 +55,11 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
   const previewing = previewingKey === requestKey && store !== null
 
   useEffect(() => { onStoreUpdatedRef.current = onStoreUpdated }, [onStoreUpdated])
+
+  useLayoutEffect(() => {
+    activePublicationScopeRef.current = publicationScope
+    if (pendingPublicationRef.current?.scope !== publicationScope) pendingPublicationRef.current = null
+  }, [publicationScope])
 
   useEffect(() => {
     let cancelled = false
@@ -66,22 +80,51 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
   }
 
   async function confirmPublication() {
-    if (!store || !transitionTarget || transitioning) return
-    setTransitioning(true)
-    setPublicationMessage(null)
+    if (!store || !transitionTarget || pendingPublicationRef.current?.scope === publicationScope) return
+    const operationId = ++publicationSequenceRef.current
+    pendingPublicationRef.current = { scope: publicationScope, id: operationId }
+    setTransitionState({ scope: publicationScope, id: operationId })
+    setPublicationMessageState(null)
+    const isCurrentOperation = () => activePublicationScopeRef.current === publicationScope &&
+      pendingPublicationRef.current?.id === operationId
+
     try {
       const response = transitionTarget === 'publish'
         ? await publishStore(accessToken, store.id)
         : await unpublishStore(accessToken, store.id)
+      if (!isCurrentOperation()) return
       setLoadState({ key: requestKey, store: response.store, error: null })
       onStoreUpdated(response.store)
-      setPublicationMessage({ type: 'success', text: transitionTarget === 'publish' ? t('publication.published', { ns: 'stores' }) : t('publication.unpublished', { ns: 'stores' }) })
-      setTransitionTarget(null)
+      setPublicationMessageState({ scope: publicationScope, type: 'success', text: transitionTarget === 'publish' ? t('publication.published', { ns: 'stores' }) : t('publication.unpublished', { ns: 'stores' }) })
+      setTransitionSelection(null)
     } catch (requestError) {
-      setPublicationMessage({ type: 'error', text: requestError instanceof Error ? requestError.message : t('publication.error', { ns: 'stores' }) })
-      setTransitionTarget(null)
+      if (!isCurrentOperation()) return
+      const message = requestError instanceof Error ? requestError.message : t('publication.error', { ns: 'stores' })
+      if (requestError instanceof ApiRequestError && requestError.status === 409) {
+        try {
+          const { store: refreshedStore } = await fetchStore(accessToken, store.id)
+          if (!isCurrentOperation()) return
+          setLoadState({ key: requestKey, store: refreshedStore, error: null })
+          onStoreUpdated(refreshedStore)
+          setPublicationMessageState({ scope: publicationScope, type: 'error', text: message })
+        } catch {
+          if (!isCurrentOperation()) return
+          setPublicationMessageState({
+            scope: publicationScope,
+            type: 'error',
+            text: message,
+            refreshError: t('publication.refreshFailed', { ns: 'stores' }),
+          })
+        }
+      } else {
+        setPublicationMessageState({ scope: publicationScope, type: 'error', text: message })
+      }
+      setTransitionSelection(null)
     } finally {
-      setTransitioning(false)
+      if (isCurrentOperation()) {
+        pendingPublicationRef.current = null
+        setTransitionState((current) => current?.id === operationId ? null : current)
+      }
     }
   }
 
@@ -90,9 +133,9 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
     const url = `${window.location.origin}/${encodeURIComponent(store.slug)}`
     try {
       await navigator.clipboard.writeText(url)
-      setPublicationMessage({ type: 'success', text: t('publication.copied', { ns: 'stores' }) })
+      setPublicationMessageState({ scope: publicationScope, type: 'success', text: t('publication.copied', { ns: 'stores' }) })
     } catch {
-      setPublicationMessage({ type: 'error', text: t('publication.copyError', { ns: 'stores' }) })
+      setPublicationMessageState({ scope: publicationScope, type: 'error', text: t('publication.copyError', { ns: 'stores' }) })
     }
   }
 
@@ -112,10 +155,13 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
         </Alert>
       ) : store ? (
         <>
-          {publicationMessage && <Alert severity={publicationMessage.type} role={publicationMessage.type === 'success' ? 'status' : 'alert'} onClose={() => setPublicationMessage(null)}>{publicationMessage.text}</Alert>}
+          {publicationMessage && <Alert severity={publicationMessage.type} role={publicationMessage.type === 'success' ? 'status' : 'alert'} onClose={() => setPublicationMessageState(null)}>
+            {publicationMessage.text}
+            {publicationMessage.refreshError && <Typography component="span"> {publicationMessage.refreshError}</Typography>}
+          </Alert>}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap' }}>
             {(source === 'member' || membershipRole === 'owner') && (store.membership?.role === 'owner' || membershipRole === 'owner') && store.status !== 'suspended' && (
-              <Button variant="contained" disabled={transitioning} onClick={() => setTransitionTarget(store.status === 'draft' ? 'publish' : 'unpublish')} sx={{ minHeight: 48 }}>
+              <Button variant="contained" disabled={transitioning} onClick={() => setTransitionSelection({ scope: publicationScope, target: store.status === 'draft' ? 'publish' : 'unpublish' })} sx={{ minHeight: 48 }}>
                 {store.status === 'draft' ? t('publication.publish', { ns: 'stores' }) : t('publication.unpublish', { ns: 'stores' })}
               </Button>
             )}
@@ -126,13 +172,13 @@ export function StoreDetailsPanel({ storeId, accessToken, source, editable, onBa
           </Stack>
           {(source === 'platform' || editable) && <Button startIcon={<VisibilityOutlinedIcon />} variant="outlined" onClick={() => setPreviewingKey(requestKey)} sx={{ alignSelf: 'flex-start', minHeight: 48 }}>{t('details.preview', { ns: 'stores' })}</Button>}
           <StoreDetailsCard key={`${store.id}-${source}`} store={store} editable={editable} onSave={saveStore} onStoreUpdated={(updated) => { setLoadState({ key: requestKey, store: updated, error: null }); onStoreUpdated(updated) }} />
-          <Dialog open={transitionTarget !== null} onClose={() => { if (!transitioning) setTransitionTarget(null) }} aria-labelledby="publication-confirm-title">
+          <Dialog open={transitionTarget !== null} onClose={() => { if (!transitioning) setTransitionSelection(null) }} aria-labelledby="publication-confirm-title">
             <DialogTitle id="publication-confirm-title">{transitionTarget === 'publish' ? t('publication.confirmPublish', { ns: 'stores' }) : t('publication.confirmUnpublish', { ns: 'stores' })}</DialogTitle>
             <DialogContent>
               <Typography>{transitionTarget === 'publish' ? t('publication.publishHelp', { ns: 'stores' }) : t('publication.unpublishHelp', { ns: 'stores' })}</Typography>
             </DialogContent>
             <DialogActions sx={{ flexWrap: 'wrap', px: 3, pb: 2 }}>
-              <Button onClick={() => setTransitionTarget(null)} disabled={transitioning} sx={{ minHeight: 44 }}>{t('details.cancel', { ns: 'stores' })}</Button>
+              <Button onClick={() => setTransitionSelection(null)} disabled={transitioning} sx={{ minHeight: 44 }}>{t('details.cancel', { ns: 'stores' })}</Button>
               <Button onClick={() => void confirmPublication()} disabled={transitioning} variant="contained" sx={{ minHeight: 44 }}>{transitioning ? t('publication.updating', { ns: 'stores' }) : transitionTarget === 'publish' ? t('publication.publish', { ns: 'stores' }) : t('publication.unpublish', { ns: 'stores' })}</Button>
             </DialogActions>
           </Dialog>
